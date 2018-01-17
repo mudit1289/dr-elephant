@@ -77,7 +77,7 @@
   <jobType>
     <name>Hive-Tez</name>
     <applicationtype>TEZ</applicationtype>
-        <conf>hive.execution.engine</conf>	
+        <conf>hive.execution.engine</conf>
     <isDefault/>
   </jobType>
   <jobType>

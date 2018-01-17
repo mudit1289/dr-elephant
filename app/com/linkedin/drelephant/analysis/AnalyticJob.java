@@ -19,6 +19,8 @@ package com.linkedin.drelephant.analysis;
 import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.util.InfoExtractor;
 import com.linkedin.drelephant.util.Utils;
+
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,14 +34,28 @@ import org.apache.log4j.Logger;
  * This class wraps some basic meta data of a completed application run (notice that the information is generally the
  * same regardless of hadoop versions and application types), and then promises to return the analyzed result later.
  */
-public class AnalyticJob {
+public class AnalyticJob implements Serializable {
   private static final Logger logger = Logger.getLogger(AnalyticJob.class);
 
   private static final String UNKNOWN_JOB_TYPE = "Unknown";   // The default job type when the data matches nothing.
-  private static final int _RETRY_LIMIT = 3;                  // Number of times a job needs to be tried before dropping
+  private static final int _RETRY_LIMIT = 3;                  // Number of times a job needs to be tried before going into second retry queue
+  private static final int _SECOND_RETRY_LIMIT = 5;           // Number of times a job needs to be tried before dropping
   private static final String EXCLUDE_JOBTYPE = "exclude_jobtypes_filter"; // excluded Job Types for heuristic
 
+
+  public boolean readyForSecondRetry() {
+    this._timeLeftToRetry = this._timeLeftToRetry - 1;
+    return (this._timeLeftToRetry <= 0);
+  }
+
+  public AnalyticJob setTimeToSecondRetry() {
+    this._timeLeftToRetry = (this._secondRetries) * 5;
+    return this;
+  }
+
+  private int _timeLeftToRetry;
   private int _retries = 0;
+  private int _secondRetries = 0;
   private ApplicationType _type;
   private String _appId;
   private String _name;
@@ -144,6 +160,20 @@ public class AnalyticJob {
     _finishTime = finishTime;
     return this;
   }
+
+  /**
+   * Returns the secondary retries count of failed jobs
+   *
+   * @return The retries count
+   */
+  public int getSecondaryRetriesCount() { return _secondRetries; }
+
+  /**
+   * Returns the retries count of failed jobs
+   *
+   * @return The retries count
+   */
+  public int getRetriesCount() { return _retries + _secondRetries; }
 
   /**
    * Returns the application id
@@ -316,11 +346,20 @@ public class AnalyticJob {
   }
 
   /**
+   * Indicate this promise should be retried in the second phase.
+   *
+   * @return true if should retry, else false
+   */
+  public boolean isSecondPhaseRetry(){
+    return (_secondRetries++) < _SECOND_RETRY_LIMIT;
+  }
+
+  /**
    * Indicate this promise should retry itself again.
    *
    * @return true if should retry, else false
    */
-  public boolean retry() {
+  public boolean isPrimaryPhaseRetry() {
     return (_retries++) < _RETRY_LIMIT;
   }
 }

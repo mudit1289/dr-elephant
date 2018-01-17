@@ -20,13 +20,8 @@ import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.math.Statistics;
 import controllers.MetricsController;
 import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Queue;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import models.AppResult;
 import org.apache.hadoop.conf.Configuration;
@@ -56,7 +51,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   // Generate a token update interval with a random deviation so that it does not update the token exactly at the same
   // time with other token updaters (e.g. ElephantFetchers).
   private static final long TOKEN_UPDATE_INTERVAL =
-      Statistics.MINUTE_IN_MS * 30 + new Random().nextLong() % (3 * Statistics.MINUTE_IN_MS);
+          Statistics.MINUTE_IN_MS * 30 + new Random().nextLong() % (3 * Statistics.MINUTE_IN_MS);
 
   private String _resourceManagerAddress;
   private long _lastTime = 0;
@@ -67,7 +62,9 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private AuthenticatedURL _authenticatedURL;
   private final ObjectMapper _objectMapper = new ObjectMapper();
 
-  private final Queue<AnalyticJob> _retryQueue = new ConcurrentLinkedQueue<AnalyticJob>();
+  private final Queue<AnalyticJob> _firstRetryQueue = new ConcurrentLinkedQueue<AnalyticJob>();
+
+  private final ArrayList<AnalyticJob> _secondRetryQueue = new ArrayList<AnalyticJob>();
 
   public void updateResourceManagerAddresses() {
     if (Boolean.valueOf(configuration.get(IS_RM_HA_ENABLED))) {
@@ -110,11 +107,11 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
 
   @Override
   public void configure(Configuration configuration)
-      throws IOException {
+          throws IOException {
     this.configuration = configuration;
     String initialFetchWindowString = configuration.get(FETCH_INITIAL_WINDOW_MS);
     if (initialFetchWindowString != null) {
-      long initialFetchWindow = Long.getLong(initialFetchWindowString);
+      long initialFetchWindow = Long.parseLong(initialFetchWindowString);
       _lastTime = System.currentTimeMillis() - FETCH_DELAY - initialFetchWindow;
       _fetchStartTime = _lastTime;
     }
@@ -130,7 +127,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
    */
   @Override
   public List<AnalyticJob> fetchAnalyticJobs()
-      throws IOException, AuthenticationException {
+          throws IOException, AuthenticationException {
     List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
 
     // There is a lag of job data from AM/NM to JobHistoryServer HDFS, we shouldn't use the current time, since there
@@ -139,7 +136,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
     updateAuthToken();
 
     logger.info("Fetching recent finished application runs between last time: " + (_lastTime + 1)
-        + ", and current time: " + _currentTime);
+            + ", and current time: " + _currentTime);
 
     // Fetch all succeeded apps
     URL succeededAppsURL = new URL(new URL("http://" + _resourceManagerAddress), String.format(
@@ -153,15 +150,24 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
     // state: Application Master State
     // finalStatus: Status of the Application as reported by the Application Master
     URL failedAppsURL = new URL(new URL("http://" + _resourceManagerAddress), String.format(
-        "/ws/v1/cluster/apps?finalStatus=FAILED&state=FINISHED&finishedTimeBegin=%s&finishedTimeEnd=%s",
-        String.valueOf(_lastTime + 1), String.valueOf(_currentTime)));
+            "/ws/v1/cluster/apps?finalStatus=FAILED&state=FINISHED&finishedTimeBegin=%s&finishedTimeEnd=%s",
+            String.valueOf(_lastTime + 1), String.valueOf(_currentTime)));
     List<AnalyticJob> failedApps = readApps(failedAppsURL);
     logger.info("The failed apps URL is " + failedAppsURL);
     appList.addAll(failedApps);
 
     // Append promises from the retry queue at the end of the list
-    while (!_retryQueue.isEmpty()) {
-      appList.add(_retryQueue.poll());
+    while (!_firstRetryQueue.isEmpty()) {
+      appList.add(_firstRetryQueue.poll());
+    }
+
+    Iterator iteratorSecondRetry = _secondRetryQueue.iterator();
+    while (iteratorSecondRetry.hasNext()) {
+      AnalyticJob job = (AnalyticJob) iteratorSecondRetry.next();
+      if(job.readyForSecondRetry()) {
+        appList.add(job);
+        iteratorSecondRetry.remove();
+      }
     }
 
     _lastTime = _currentTime;
@@ -170,8 +176,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
 
   @Override
   public void addIntoRetries(AnalyticJob promise) {
-    _retryQueue.add(promise);
-    int retryQueueSize = _retryQueue.size();
+    _firstRetryQueue.add(promise);
+    int retryQueueSize = _firstRetryQueue.size();
     MetricsController.setRetryQueueSize(retryQueueSize);
     logger.info("Retry queue size is " + retryQueueSize);
   }
@@ -197,9 +203,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
    * @throws AuthenticationException Authencation problem
    */
   private JsonNode readJsonNode(URL url)
-      throws IOException, AuthenticationException {
-    HttpURLConnection conn = _authenticatedURL.openConnection(url, _token);
-    return _objectMapper.readTree(conn.getInputStream());
+          throws IOException, AuthenticationException {
+    return _objectMapper.readTree(url.openStream());
   }
 
   /**
@@ -230,13 +235,13 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         long finishTime = app.get("finishedTime").getLongValue();
 
         ApplicationType type =
-            ElephantContext.instance().getApplicationTypeForName(app.get("applicationType").getValueAsText());
+                ElephantContext.instance().getApplicationTypeForName(app.get("applicationType").getValueAsText());
 
         // If the application type is supported
         if (type != null) {
           AnalyticJob analyticJob = new AnalyticJob();
           analyticJob.setAppId(appId).setAppType(type).setUser(user).setName(name).setQueueName(queueName)
-              .setTrackingUrl(trackingUrl).setStartTime(startTime).setFinishTime(finishTime);
+                  .setTrackingUrl(trackingUrl).setStartTime(startTime).setFinishTime(finishTime);
 
           appList.add(analyticJob);
         }
