@@ -63,10 +63,22 @@ import views.html.page.helpPage;
 import views.html.page.homePage;
 import views.html.page.jobHistoryPage;
 import views.html.page.searchPage;
+import views.html.results.compareResults;
+import views.html.results.flowDetails;
+import views.html.results.oldFlowHistoryResults;
+import views.html.results.jobDetails;
+import views.html.results.oldJobHistoryResults;
+import views.html.results.oldFlowMetricsHistoryResults;
+import views.html.results.oldJobMetricsHistoryResults;
+import views.html.results.searchResults;
 import views.html.results.*;
 
 import views.html.page.oldFlowHistoryPage;
 import views.html.page.oldJobHistoryPage;
+import views.html.results.jobHistoryResults;
+import views.html.results.flowHistoryResults;
+import views.html.results.flowMetricsHistoryResults;
+import views.html.results.jobMetricsHistoryResults;
 import views.html.page.oldHelpPage;
 
 import com.google.gson.*;
@@ -803,7 +815,6 @@ public class Application extends Controller {
       if (page == null) {
         page = getMetricsNameView().get(topic);
       }
-
       if (page != null) {
         title = topic;
       }
@@ -1142,19 +1153,15 @@ public class Application extends Controller {
 
       // Execution record
       JsonObject dataset = new JsonObject();
-      dataset.addProperty("flowtime", Utils.getFlowTime(mrJobsList.get(mrJobsList.size() - 1)));
+      dataset.addProperty("flowtime", mrJobsList.get(mrJobsList.size() - 1).finishTime);
       dataset.addProperty("score", flowPerfScore);
       dataset.add("jobscores", jobScores);
 
       datasets.add(dataset);
     }
 
-    JsonArray sortedDatasets = Utils.sortJsonArray(datasets);
-
-    return ok(new Gson().toJson(sortedDatasets));
+    return ok(new Gson().toJson(datasets));
   }
-
-
 
   /**
    * The data for plotting the job history graph. While plotting the job history
@@ -1237,16 +1244,14 @@ public class Application extends Controller {
 
       // Execution record
       JsonObject dataset = new JsonObject();
-      dataset.addProperty("flowtime", Utils.getFlowTime(mrJobsList.get(mrJobsList.size() - 1)));
+      dataset.addProperty("flowtime", mrJobsList.get(mrJobsList.size() - 1).finishTime);
       dataset.addProperty("score", jobPerfScore);
       dataset.add("stagescores", stageScores);
 
       datasets.add(dataset);
     }
 
-    JsonArray sortedDatasets = Utils.sortJsonArray(datasets);
-
-    return ok(new Gson().toJson(sortedDatasets));
+    return ok(new Gson().toJson(datasets));
   }
 
   /**
@@ -1341,7 +1346,7 @@ public class Application extends Controller {
 
       // Execution record
       JsonObject dataset = new JsonObject();
-      dataset.addProperty("flowtime", Utils.getFlowTime(mrJobsList.get(mrJobsList.size() - 1)));
+      dataset.addProperty("flowtime", mrJobsList.get(mrJobsList.size() - 1).finishTime);
       dataset.addProperty("runtime", Utils.getTotalRuntime(mrJobsList));
       dataset.addProperty("waittime", Utils.getTotalWaittime(mrJobsList));
       dataset.addProperty("resourceused", totalMemoryUsed);
@@ -1351,9 +1356,7 @@ public class Application extends Controller {
       datasets.add(dataset);
     }
 
-    JsonArray sortedDatasets = Utils.sortJsonArray(datasets);
-
-    return ok(new Gson().toJson(sortedDatasets));
+    return ok(new Gson().toJson(datasets));
   }
 
   /**
@@ -1493,7 +1496,7 @@ public class Application extends Controller {
 
       // Execution record
       JsonObject dataset = new JsonObject();
-      dataset.addProperty("flowtime", Utils.getFlowTime(mrJobsList.get(mrJobsList.size() - 1)));
+      dataset.addProperty("flowtime", mrJobsList.get(mrJobsList.size() - 1).finishTime);
       dataset.addProperty("runtime", totalFlowRuntime);
       dataset.addProperty("waittime", totalFlowDelay);
       dataset.addProperty("resourceused", totalFlowMemoryUsed);
@@ -1503,9 +1506,7 @@ public class Application extends Controller {
       datasets.add(dataset);
     }
 
-    JsonArray sortedDatasets = Utils.sortJsonArray(datasets);
-
-    return ok(new Gson().toJson(sortedDatasets));
+    return ok(new Gson().toJson(datasets));
   }
 
   /**

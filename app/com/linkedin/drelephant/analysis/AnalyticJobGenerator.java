@@ -35,7 +35,7 @@ public interface AnalyticJobGenerator {
    * @throws Exception
    */
   public void configure(Configuration configuration)
-      throws IOException;
+          throws IOException;
 
   /**
    * Configures the resource manager addresses considering HA

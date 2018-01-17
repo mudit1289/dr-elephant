@@ -74,4 +74,16 @@
     <conf>mapred.child.java.opts</conf>
     <isDefault/>
   </jobType>
+  <jobType>
+    <name>Hive-Tez</name>
+    <applicationtype>TEZ</applicationtype>
+        <conf>hive.execution.engine</conf>
+    <isDefault/>
+  </jobType>
+  <jobType>
+    <name>Pig-Tez</name>
+    <applicationtype>TEZ</applicationtype>
+        <conf>exectype</conf>
+        <value>TEZ</value>
+  </jobType>
 </jobTypes>

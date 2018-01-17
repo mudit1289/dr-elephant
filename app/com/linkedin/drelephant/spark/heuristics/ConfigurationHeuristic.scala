@@ -17,13 +17,18 @@
 package com.linkedin.drelephant.spark.heuristics
 
 import java.util.ArrayList
+import com.linkedin.drelephant.analysis._
+
+import com.linkedin.drelephant.math.Statistics
+
 import scala.collection.JavaConverters
 import scala.util.Try
-import com.linkedin.drelephant.analysis._
+
+import com.linkedin.drelephant.analysis.{HeuristicResultDetails, Heuristic, HeuristicResult, Severity}
 import com.linkedin.drelephant.configurations.heuristic.HeuristicConfigurationData
 import com.linkedin.drelephant.spark.data.SparkApplicationData
 import com.linkedin.drelephant.util.MemoryFormatUtils
-import com.linkedin.drelephant.math.Statistics
+
 
 /**
   * A heuristic based on an app's known configuration.

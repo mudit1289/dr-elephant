@@ -24,8 +24,12 @@ import com.linkedin.drelephant.math.Statistics;
 import com.linkedin.drelephant.security.HadoopSecurity;
 import controllers.MetricsController;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 import models.AppResult;
 import models.CheckPoint;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -64,16 +68,17 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private long _fetchStartTime = 0;
   private long _currentTime = 0;
   private long _tokenUpdatedTime = 0;
+  private HadoopSecurity _hadoopSecurity;
   private AuthenticatedURL.Token _token;
   private AuthenticatedURL _authenticatedURL;
   private final ObjectMapper _objectMapper = new ObjectMapper();
 
   private void securityCheck() {
 
-    HadoopSecurity hadoopSecurity = ElephantRunner.getInstance().getHadoopSecurity();
+    _hadoopSecurity = ElephantRunner.getInstance().getHadoopSecurity();
     while (true) {
       try {
-        hadoopSecurity.checkLogin();
+        _hadoopSecurity.checkLogin();
         break;
       } catch (IOException e) {
         logger.info("Error with hadoop kerberos login", e);
@@ -96,7 +101,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
 
     while (true) {
       try {
-        todos = ElephantRunner.getInstance().getExecutorService().getJobList();
+        todos = fetchAnalyticJobs();
         logger.info("jobs count: " + todos.size());
         break;
       } catch (Exception e) {
@@ -157,7 +162,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
     this.configuration = configuration;
     String initialFetchWindowString = configuration.get(FETCH_INITIAL_WINDOW_MS);
     if (initialFetchWindowString != null) {
-      long initialFetchWindow = Long.parseLong(initialFetchWindowString);
+      long initialFetchWindow = Long.getLong(initialFetchWindowString);
       _lastTime = System.currentTimeMillis() - FETCH_DELAY - initialFetchWindow;
       _fetchStartTime = _lastTime;
     }
@@ -304,7 +309,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
    */
   private JsonNode readJsonNode(URL url)
       throws IOException, AuthenticationException {
-    return _objectMapper.readTree(url.openStream());
+    HttpURLConnection conn = _authenticatedURL.openConnection(url, _token);
+    return _objectMapper.readTree(conn.getInputStream());
   }
 
   /**

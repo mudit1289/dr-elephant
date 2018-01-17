@@ -313,9 +313,9 @@ public class AnalyticJob implements Serializable {
     for (HeuristicResult heuristicResult : analysisResults) {
       AppHeuristicResult detail = new AppHeuristicResult();
       detail.heuristicClass = Utils.truncateField(heuristicResult.getHeuristicClassName(),
-          AppHeuristicResult.HEURISTIC_CLASS_LIMIT, getAppId());
+              AppHeuristicResult.HEURISTIC_CLASS_LIMIT, getAppId());
       detail.heuristicName = Utils.truncateField(heuristicResult.getHeuristicName(),
-          AppHeuristicResult.HEURISTIC_NAME_LIMIT, getAppId());
+              AppHeuristicResult.HEURISTIC_NAME_LIMIT, getAppId());
       detail.severity = heuristicResult.getSeverity();
       detail.score = heuristicResult.getScore();
 
@@ -324,11 +324,11 @@ public class AnalyticJob implements Serializable {
         AppHeuristicResultDetails heuristicDetail = new AppHeuristicResultDetails();
         heuristicDetail.yarnAppHeuristicResult = detail;
         heuristicDetail.name = Utils.truncateField(heuristicResultDetails.getName(),
-            AppHeuristicResultDetails.NAME_LIMIT, getAppId());
+                AppHeuristicResultDetails.NAME_LIMIT, getAppId());
         heuristicDetail.value = Utils.truncateField(heuristicResultDetails.getValue(),
-            AppHeuristicResultDetails.VALUE_LIMIT, getAppId());
+                AppHeuristicResultDetails.VALUE_LIMIT, getAppId());
         heuristicDetail.details = Utils.truncateField(heuristicResultDetails.getDetails(),
-            AppHeuristicResultDetails.DETAILS_LIMIT, getAppId());
+                AppHeuristicResultDetails.DETAILS_LIMIT, getAppId());
         // This was added for AnalyticTest. Commenting this out to fix a bug. Also disabling AnalyticJobTest.
         //detail.yarnAppHeuristicResultDetails = new ArrayList<AppHeuristicResultDetails>();
         detail.yarnAppHeuristicResultDetails.add(heuristicDetail);

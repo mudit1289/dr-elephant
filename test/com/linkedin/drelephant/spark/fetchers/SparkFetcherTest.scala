@@ -24,8 +24,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import com.linkedin.drelephant.analysis.{AnalyticJob, ApplicationType}
 import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData
 import com.linkedin.drelephant.spark.data.{SparkApplicationData, SparkLogDerivedData, SparkRestDerivedData}
-import com.linkedin.drelephant.spark.fetchers.SparkFetcher.EventLogSource
 import com.linkedin.drelephant.spark.fetchers.statusapiv1.{ApplicationAttemptInfoImpl, ApplicationInfoImpl}
+import com.linkedin.drelephant.spark.data.{SparkLogDerivedData, SparkRestDerivedData}
+import com.linkedin.drelephant.spark.fetchers.SparkFetcher.EventLogSource
 import com.linkedin.drelephant.util.{SparkUtils, HadoopUtils}
 import org.apache.log4j.Logger
 import org.apache.spark.SparkConf
