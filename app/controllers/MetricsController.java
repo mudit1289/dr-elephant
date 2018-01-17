@@ -16,12 +16,7 @@
 
 package controllers;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.JmxReporter;
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
+import com.codahale.metrics.*;
 import com.codahale.metrics.health.HealthCheckRegistry;
 import com.codahale.metrics.health.jvm.ThreadDeadlockHealthCheck;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
@@ -60,8 +55,11 @@ public class MetricsController extends Controller {
 
   private static int _queueSize = -1;
   private static int _retryQueueSize = -1;
+  private static int _secondRetryQueueSize = -1;
   private static Meter _skippedJobs;
   private static Meter _processedJobs;
+  private static Meter _retriedJobs;
+  private static Counter _retriedJobsBackLogCount;
   private static Histogram _jobProcessingTime;
 
   /**
@@ -87,6 +85,8 @@ public class MetricsController extends Controller {
 
     _skippedJobs = _metricRegistry.meter(name(className, "skippedJobs", "count"));
     _processedJobs = _metricRegistry.meter(name(className, "processedJobs", "count"));
+    _retriedJobs = _metricRegistry.meter(name(className, "retriedJobs", "count"));
+    _retriedJobsBackLogCount = _metricRegistry.counter(name(className, "retriedJobsBackLogCount", "count"));
     _jobProcessingTime = _metricRegistry.histogram(name(className, "jobProcessingTime", "ms"));
     _metricRegistry.register(name(className, "jobQueue", "size"), new Gauge<Integer>() {
       @Override
@@ -117,6 +117,12 @@ public class MetricsController extends Controller {
       @Override
       public Integer getValue() {
         return _retryQueueSize;
+      }
+    });
+    _metricRegistry.register(name(className, "secondRetryQueue", "size"), new Gauge<Integer>() {
+      @Override
+      public Integer getValue() {
+        return _secondRetryQueueSize;
       }
     });
     _metricRegistry.registerAll(new CustomGarbageCollectorMetricSet());
@@ -203,6 +209,61 @@ public class MetricsController extends Controller {
   }
 
   /**
+   * Increments the meter for keeping track of retried jobs in metrics registry.
+   */
+  public static void markRetriedJobs() {
+    if(_retriedJobs != null) {
+      _retriedJobs.mark();
+    }
+  }
+
+  /**
+   * Increments the counter for keeping track of retried jobs in metrics registry.
+   */
+  public static void incRetriedJobsBackLogCount() {
+    if(_retriedJobsBackLogCount != null) {
+      _retriedJobsBackLogCount.inc();
+    }
+  }
+
+  /**
+   * Decrements the meter for keeping track of retried jobs in metrics registry.
+   */
+  public static void decRetriedJobsBackLogCount() {
+    if(_retriedJobsBackLogCount != null) {
+      _retriedJobsBackLogCount.dec();
+    }
+  }
+
+  /**
+   * Actions to be taken on job completion
+   * @param retriesCount
+   * @param processingTimeTaken
+   */
+  public static void triggerJobCompletedEvent(int retriesCount, long processingTimeTaken) {
+    setJobProcessingTime(processingTimeTaken);
+    markProcessedJobs();
+    if(retriesCount > 0) { decRetriedJobsBackLogCount(); }
+  }
+
+  /**
+   * Actions to be taken on job failure
+   * @param retriesCount
+   */
+  public static void triggerJobFailedEvent(int retriesCount) {
+    markRetriedJobs();
+    if(retriesCount == 1) { incRetriedJobsBackLogCount(); }
+  }
+
+  /**
+   * Actions to be taken if job exceeds the set number of retries
+   */
+  public static void triggerJobRetriesExhaustionEvent() {
+    markSkippedJob();
+    decRetriedJobsBackLogCount();
+  }
+
+  /**
    * The endpoint /ping
    * Ping will respond with the message 'alive' if the application is running.
    *
@@ -238,5 +299,9 @@ public class MetricsController extends Controller {
     } else {
       return ok(Json.toJson(HEALTHCHECK_NOT_ENABLED));
     }
+  }
+
+  public static void setSecondRetryQueueSize(int secondRetryQueueSize) {
+    _secondRetryQueueSize = secondRetryQueueSize;
   }
 }
