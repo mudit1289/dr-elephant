@@ -16,14 +16,19 @@
 
 package com.linkedin.drelephant.analysis;
 
+import com.avaje.ebean.Ebean;
+import com.avaje.ebean.SqlUpdate;
 import com.linkedin.drelephant.ElephantContext;
+import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.math.Statistics;
+import com.linkedin.drelephant.security.HadoopSecurity;
 import controllers.MetricsController;
 import java.io.IOException;
 import java.net.URL;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import models.AppResult;
+import models.CheckPoint;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
@@ -54,6 +59,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
       Statistics.MINUTE_IN_MS * 30 + new Random().nextLong() % (3 * Statistics.MINUTE_IN_MS);
 
   private String _resourceManagerAddress;
+  private long _lastRun;
   private long _lastTime = 0;
   private long _fetchStartTime = 0;
   private long _currentTime = 0;
@@ -62,9 +68,49 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private AuthenticatedURL _authenticatedURL;
   private final ObjectMapper _objectMapper = new ObjectMapper();
 
-  private final Queue<AnalyticJob> _firstRetryQueue = new ConcurrentLinkedQueue<AnalyticJob>();
+  private void securityCheck() {
 
-  private final ArrayList<AnalyticJob> _secondRetryQueue = new ArrayList<AnalyticJob>();
+    HadoopSecurity hadoopSecurity = ElephantRunner.getInstance().getHadoopSecurity();
+    while (true) {
+      try {
+        hadoopSecurity.checkLogin();
+        break;
+      } catch (IOException e) {
+        logger.info("Error with hadoop kerberos login", e);
+        waitInterval(ElephantRunner.getInstance().getRetryInterval());
+      }
+    }
+  }
+
+  public void fetchAndExecuteJobs(long checkPoint) {
+
+    updateResourceManagerAddresses();
+
+    _lastRun = System.currentTimeMillis();
+    logger.info("Fetching analytic job list...");
+
+    securityCheck();
+
+    _lastTime = checkPoint;
+    List<AnalyticJob> todos;
+
+    while (true) {
+      try {
+        todos = ElephantRunner.getInstance().getExecutorService().getJobList();
+        logger.info("jobs count: " + todos.size());
+        break;
+      } catch (Exception e) {
+        logger.error("Error fetching job list. Try again later...", e);
+        waitInterval(ElephantRunner.getInstance().getRetryInterval());
+      }
+    }
+
+    for (AnalyticJob analyticJob : todos) {
+      ElephantRunner.getInstance().getExecutorService().execute(analyticJob);
+    }
+
+    updateCheckPoint();
+  }
 
   public void updateResourceManagerAddresses() {
     if (Boolean.valueOf(configuration.get(IS_RM_HA_ENABLED))) {
@@ -125,7 +171,6 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
    * @throws IOException
    * @throws AuthenticationException
    */
-  @Override
   public List<AnalyticJob> fetchAnalyticJobs()
       throws IOException, AuthenticationException {
     List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
@@ -156,38 +201,85 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
     logger.info("The failed apps URL is " + failedAppsURL);
     appList.addAll(failedApps);
 
-    // Append promises from the retry queue at the end of the list
-    while (!_firstRetryQueue.isEmpty()) {
-      appList.add(_firstRetryQueue.poll());
-    }
-
-    Iterator iteratorSecondRetry = _secondRetryQueue.iterator();
-    while (iteratorSecondRetry.hasNext()) {
-      AnalyticJob job = (AnalyticJob) iteratorSecondRetry.next();
-      if(job.readyForSecondRetry()) {
-        appList.add(job);
-        iteratorSecondRetry.remove();
-      }
-    }
-
-    _lastTime = _currentTime;
     return appList;
   }
 
   @Override
-  public void addIntoRetries(AnalyticJob promise) {
-    _firstRetryQueue.add(promise);
-    int retryQueueSize = _firstRetryQueue.size();
-    MetricsController.setRetryQueueSize(retryQueueSize);
-    logger.info("Retry queue size is " + retryQueueSize);
+  public void analyseJob(AnalyticJob analyticJob) {
+    try {
+      String analysisName = String.format("%s %s", analyticJob.getAppType().getName(), analyticJob.getAppId());
+      long analysisStartTimeMillis = System.currentTimeMillis();
+      logger.info(String.format("Analyzing %s", analysisName));
+      AppResult result = analyticJob.getAnalysis();
+      result.save();
+      long processingTime = System.currentTimeMillis() - analysisStartTimeMillis;
+      logger.info(String.format("Analysis of %s took %sms", analysisName, processingTime));
+      MetricsController.triggerJobCompletedEvent(analyticJob.getRetriesCount(), processingTime);
+
+    } catch (InterruptedException e) {
+      logger.info("Thread interrupted");
+      logger.info(e.getMessage());
+      logger.info(ExceptionUtils.getStackTrace(e));
+      Thread.currentThread().interrupt();
+
+    } catch (Exception e) {
+      logger.error(e.getMessage());
+      logger.error(ExceptionUtils.getStackTrace(e));
+
+      if (analyticJob != null && analyticJob.isPrimaryPhaseRetry()) {
+        logger.error("Add analytic job id [" + analyticJob.getAppId() + "] into the retry list.");
+        MetricsController.triggerJobFailedEvent(analyticJob.getRetriesCount());
+        ElephantRunner.getInstance().getExecutorService().onPrimaryRetry(analyticJob);
+
+      } else if (analyticJob != null && analyticJob.isSecondPhaseRetry()) {
+        //Putting the job into a second retry queue which fetches jobs after some interval. Some spark jobs may need more time than usual to process, hence the queue.
+        logger.error("Add analytic job id [" + analyticJob.getAppId() + "] into the second retry list.");
+        MetricsController.triggerJobFailedEvent(analyticJob.getRetriesCount());
+        ElephantRunner.getInstance().getExecutorService().onSecondaryRetry(analyticJob);
+
+      } else {
+        if (analyticJob != null) {
+          MetricsController.triggerJobRetriesExhaustionEvent();
+          logger.error("Drop the analytic job. Reason: reached the max retries for application id = ["
+                  + analyticJob.getAppId() + "].");
+        }
+      }
+    }
   }
 
   @Override
-  public void addIntoSecondRetryQueue(AnalyticJob promise) {
-    _secondRetryQueue.add(promise.setTimeToSecondRetry());
-    int secondRetryQueueSize = _secondRetryQueue.size();
-    MetricsController.setSecondRetryQueueSize(secondRetryQueueSize);
-    logger.info("Second Retry queue size is " + secondRetryQueueSize);
+  public void waitInterval(long interval) {
+
+    long nextRun = _lastRun + interval;
+    long waitTime = nextRun - System.currentTimeMillis();
+
+    if (waitTime <= 0) {
+      return;
+    }
+
+    try {
+      Thread.sleep(waitTime);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
+  @Override
+  public long getCheckPoint() {
+
+    CheckPoint checkPoint = Ebean.find(CheckPoint.class).where().eq("id", 1).findUnique();
+    logger.info("lastTime: " + checkPoint.lastTime);
+    return checkPoint.lastTime;
+  }
+
+  @Override
+  public void updateCheckPoint() {
+
+    String dml = "update check_point set last_time = :last_time where id = :id";
+    SqlUpdate update = Ebean.createSqlUpdate(dml)
+            .setParameter("last_time", _currentTime)
+            .setParameter("id", 1);
+    update.execute();
   }
 
   /**
