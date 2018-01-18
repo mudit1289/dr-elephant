@@ -68,6 +68,10 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private AuthenticatedURL _authenticatedURL;
   private final ObjectMapper _objectMapper = new ObjectMapper();
 
+  public String getResourceManagerAddress() {
+    return _resourceManagerAddress;
+  }
+
   private void securityCheck() {
 
     HadoopSecurity hadoopSecurity = ElephantRunner.getInstance().getHadoopSecurity();

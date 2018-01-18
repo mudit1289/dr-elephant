@@ -16,16 +16,13 @@
 
 package com.linkedin.drelephant.tez.fetchers;
 
-import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.analysis.AnalyticJob;
-import com.linkedin.drelephant.analysis.ApplicationType;
+import com.linkedin.drelephant.analysis.AnalyticJobGeneratorHadoop2;
 import com.linkedin.drelephant.tez.data.TezCounterData;
 import com.linkedin.drelephant.tez.data.TezDAGApplicationData;
 import com.linkedin.drelephant.tez.data.TezDAGData;
 import com.linkedin.drelephant.tez.data.TezVertexData;
-import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
 import com.linkedin.drelephant.tez.data.TezVertexTaskData;
-import com.linkedin.drelephant.tez.fetchers.ThreadContextTez;
 import com.linkedin.drelephant.math.Statistics;
 import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
 import com.linkedin.drelephant.util.Utils;
@@ -37,18 +34,14 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import models.AppResult;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
@@ -71,20 +64,23 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   private String _resourcemanager;
   private String _resourcemanagerWebAddress;
   private String _dagId;
-  private static final String SUCCEEDED="SUCCEEDED"; 
+  private static final String SUCCEEDED="SUCCEEDED";
   /**
-   * Tez Fetcher uses Timeline server data in order to fetch the data. Tez DAG submits data to 
-   * the timeline server using events. 
+   * Tez Fetcher uses Timeline server data in order to fetch the data. Tez DAG submits data to
+   * the timeline server using events.
    * @param fetcherConfData
    * @throws IOException
    */
   public TezDataFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
+    AnalyticJobGeneratorHadoop2 analyticJobGeneratorHadoop2 = new AnalyticJobGeneratorHadoop2();
+    analyticJobGeneratorHadoop2.configure(new Configuration());
+
+    final String resourcemanager = analyticJobGeneratorHadoop2.getResourceManagerAddress();
     final String timelineaddress = new Configuration().get("yarn.timeline-service.webapp.address");
     final String jhistoryAddr = new Configuration().get("mapreduce.jobhistory.webapp.address");
-   
-    final String resourcemanager = new Configuration().get("yarn.resourcemanager.webapp.address");
+
     logger.info("Connecting to the job history server at " + timelineaddress + "...");
     _urlFactory = new URLFactory(timelineaddress);
     logger.info("Connection success.");
@@ -92,21 +88,21 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     _jsonFactory = new JSONFactory();
     this._timelinewebaddress =  timelineaddress;
     _jhistoryWebAddr = "http://" + jhistoryAddr + "/jobhistory/job/";
-    
-    _resourcemanager = "http://"+resourcemanager+"/cluster/app/";
-    _resourcemanagerWebAddress = "http://"+resourcemanager+"/ws/v1/cluster/apps/";
+
+    _resourcemanager = String.format("http://%s/cluster/app/", resourcemanager);
+    _resourcemanagerWebAddress = String.format("http://%s/ws/v1/cluster/apps/", resourcemanager);
 
   }
 
   /**
-   * The fetcher gets the number of dags submitted per application using the diagnostic info from Resource Manager 
-   * Then each dag is analyzed and vertex/task information is parsed using the data from timeline server 
-   * The analysis is done at the application level and not DAG level. 
+   * The fetcher gets the number of dags submitted per application using the diagnostic info from Resource Manager
+   * Then each dag is analyzed and vertex/task information is parsed using the data from timeline server
+   * The analysis is done at the application level and not DAG level.
    */
   @Override
   public TezDAGApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
     String appId = analyticJob.getAppId();
-   TezDAGApplicationData jobData = new TezDAGApplicationData();
+    TezDAGApplicationData jobData = new TezDAGApplicationData();
     String jobId = Utils.getJobIdFromApplicationId(appId);
     jobData.setAppId(appId).setJobId(jobId);
     // Change job tracking url to job history page
@@ -114,24 +110,24 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     try {
 
       // Fetch job config
-     Properties jobConf = _jsonFactory.getProperties(_urlFactory.getJobConfigURL(appId));
-     jobData.setJobConf(jobConf);
-      
+      Properties jobConf = _jsonFactory.getProperties(_urlFactory.getJobConfigURL(appId));
+      jobData.setJobConf(jobConf);
+
       //Fetch number of dags submitted
       int dagCount = getDagSubmittedCount(_urlFactory.getTezDagSubmittedCountURL(appId),jobData);
-      
 
-      
+
+
       //Right now it only supports DAGs which succeeded. It looks at DAG details to understand wether the application failed or succeded later in the code.
       String state = "SUCCEEDED";
 
 
       if (state.equals(SUCCEEDED)) {
-    	  
+
         jobData.setSucceeded(true);
         // Fetch job counter
-        
-        
+
+
         TezVertexData[] tezVertexData=null;
         String dagId = null;
         //TezDAGData[] tezDAGData=new TezDAGData[dagCount];
@@ -141,28 +137,28 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
         List<TezVertexTaskData> scopeTaskList = new ArrayList<TezVertexTaskData>();
         List<TezVertexData> tezVertexList = new ArrayList<TezVertexData>();
         for(int i=1;i<=dagCount;i++){
-        // Fetch task data
-        URL taskListURL = _urlFactory.getTaskListURL(jobId);
-        TezCounterData jobCounter = _jsonFactory.getJobCounter(_urlFactory.getTezDAGURL(appId, i));
-         dagId = _urlFactory.getTezDAGId(appId,i);
-        jobData.setCounters(jobCounter);
-        TezDAGData tezDAGData = new TezDAGData(jobCounter);
-        tezDAGData.setCounter(jobCounter);
-        tezDAGData.setDagName(dagId);
-        tezDAGData.setTezDAGId(dagId);
-        tezDAGDataList.add(tezDAGData);
-        _jsonFactory.getTaskDataAll(tezVertexList, mapperList, reducerList,scopeTaskList,_urlFactory.getTezDAGURL(appId, i));
-        tezVertexData = tezVertexList.toArray(new TezVertexData[tezVertexList.size()]);
-        tezVertexList.clear();
-        mapperList.clear();
-        reducerList.clear();
-        scopeTaskList.clear();
-        tezDAGData.setVertexData(tezVertexData);
-        }      
+          // Fetch task data
+          URL taskListURL = _urlFactory.getTaskListURL(jobId);
+          TezCounterData jobCounter = _jsonFactory.getJobCounter(_urlFactory.getTezDAGURL(appId, i));
+          dagId = _urlFactory.getTezDAGId(appId,i);
+          jobData.setCounters(jobCounter);
+          TezDAGData tezDAGData = new TezDAGData(jobCounter);
+          tezDAGData.setCounter(jobCounter);
+          tezDAGData.setDagName(dagId);
+          tezDAGData.setTezDAGId(dagId);
+          tezDAGDataList.add(tezDAGData);
+          _jsonFactory.getTaskDataAll(tezVertexList, mapperList, reducerList,scopeTaskList,_urlFactory.getTezDAGURL(appId, i));
+          tezVertexData = tezVertexList.toArray(new TezVertexData[tezVertexList.size()]);
+          tezVertexList.clear();
+          mapperList.clear();
+          reducerList.clear();
+          scopeTaskList.clear();
+          tezDAGData.setVertexData(tezVertexData);
+        }
         TezDAGData tezDAGDataArray[] = new TezDAGData[tezDAGDataList.size()];
         jobData.setTezDAGData(tezDAGDataList.toArray(tezDAGDataArray));
-       
-      } 
+
+      }
     } finally {
       ThreadContextTez.updateAuthToken();
     }
@@ -179,32 +175,31 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
    * @throws AuthenticationException
    */
   private int getDagSubmittedCount(URL url,TezDAGApplicationData jobData) throws IOException,AuthenticationException{
-	    List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
+    List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
+
+    JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+
+    String diagnosticsInfo = rootNode.path("app").path("diagnostics").getValueAsText();
+    Long startedTime = (rootNode.path("app").path("startedTime").getLongValue());
+    Long finishedTime = (rootNode.path("app").path("finishedTime").getLongValue());
+    int dagCount = 0;
+    if(diagnosticsInfo!=null){
+      String dagTypes[] = diagnosticsInfo.replace("Session stats:", "").split(",");
+
+      jobData.setStartTime(startedTime);
+      jobData.setFinishTime(finishedTime);
+
+      for(String dagType:dagTypes){
+
+        dagCount += Integer.parseInt(dagType.substring((dagType.indexOf("=")+1)).trim());
+
+      }
+    }
+    return dagCount;
+  }
 
 
-	    JsonNode rootNode = ThreadContextTez.readJsonNode(url);
-	   
-	    String diagnosticsInfo = rootNode.path("app").path("diagnostics").getValueAsText();
-	    Long startedTime = (rootNode.path("app").path("startedTime").getLongValue());
-	    Long finishedTime = (rootNode.path("app").path("finishedTime").getLongValue());
-	    int dagCount = 0;
-	    if(diagnosticsInfo!=null){
-	    String dagTypes[] = diagnosticsInfo.replace("Session stats:", "").split(",");
-	   
-	    jobData.setStartTime(startedTime);
-	    jobData.setFinishTime(finishedTime);
-	   
-	    for(String dagType:dagTypes){
-	    	
-	    	dagCount += Integer.parseInt(dagType.substring((dagType.indexOf("=")+1)).trim());
-	    	
-	    }
-	    } 
-	    return dagCount;
-	  }
-  
-  
-  
+
 
   private URL getTaskCounterURL(String jobId, String taskId) throws MalformedURLException {
     return _urlFactory.getTaskCounterURL(jobId, taskId);
@@ -222,7 +217,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     private URLFactory(String hserverAddr) throws IOException {
       _restRoot = "http://" + hserverAddr + "/ws/v1/history/mapreduce/jobs";
       _tezRoot = "http://"+hserverAddr+"/ws/v1/timeline/";
-      
+
       verifyURL(_tezRoot);
     }
 
@@ -238,11 +233,11 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     }
 
     private URL getJobConfigURL(String appId) throws MalformedURLException {
-    	 appId = "tez_"+appId;
-    	//System.out.println(appId+"appId");
-    	appId =_tezRoot+"TEZ_APPLICATION/"+appId;
-    	//System.out.println(appId+"appId");
-        return new URL(appId);
+      appId = "tez_"+appId;
+      //System.out.println(appId+"appId");
+      appId =_tezRoot+"TEZ_APPLICATION/"+appId;
+      //System.out.println(appId+"appId");
+      return new URL(appId);
     }
 
     private URL getJobCounterURL(String jobId) throws MalformedURLException {
@@ -265,36 +260,36 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
       return new URL(_restRoot + "/" + jobId + "/tasks/" + taskId + "/attempts/" + attemptId);
     }
     private URL getTezDAGURL(String appId,int id) throws MalformedURLException {
-    	String dagId = appId.replace("application","dag");
-    //	System.out.println(dagId+"dagId");
-    	dagId =_tezRoot+"TEZ_DAG_ID/"+dagId+"_"+id;
-    //	System.out.println(dagId+"dagId");
-        return new URL(dagId);
-      }
+      String dagId = appId.replace("application","dag");
+      //	System.out.println(dagId+"dagId");
+      dagId =_tezRoot+"TEZ_DAG_ID/"+dagId+"_"+id;
+      //	System.out.println(dagId+"dagId");
+      return new URL(dagId);
+    }
     private String getTezDAGId(String appId,int id) throws MalformedURLException {
-    	String dagId = appId.replace("application","dag");
-    //	System.out.println(dagId+"dagId");
-    	dagId =dagId+"_"+id;
-    //	System.out.println(dagId+"dagId");
-        return (dagId);
-      }
+      String dagId = appId.replace("application","dag");
+      //	System.out.println(dagId+"dagId");
+      dagId =dagId+"_"+id;
+      //	System.out.println(dagId+"dagId");
+      return (dagId);
+    }
     private URL getTezDagSubmittedCountURL(String appId) throws MalformedURLException{
-    	return new URL(_resourcemanagerWebAddress+appId);
+      return new URL(_resourcemanagerWebAddress+appId);
     }
     private URL getTezDAGURL(String dagId) throws MalformedURLException {
-        return new URL(_tezRoot+"TEZ_DAG_ID/"+dagId);
-      }
-    
-     private URL getTezVertexURL(String tezVertexId) throws MalformedURLException {
-    
-    	 String tezVertexURL = _tezRoot+"TEZ_VERTEX_ID/"+tezVertexId;
-        return new URL(tezVertexURL);
-      }
-     private URL getTezTaskIdURL(String tezTaskId) throws MalformedURLException {
-    	 String tezTaskIdURL = _tezRoot+"TEZ_TASK_ID/"+tezTaskId;
-         return new URL(tezTaskIdURL);
-       }
-     
+      return new URL(_tezRoot+"TEZ_DAG_ID/"+dagId);
+    }
+
+    private URL getTezVertexURL(String tezVertexId) throws MalformedURLException {
+
+      String tezVertexURL = _tezRoot+"TEZ_VERTEX_ID/"+tezVertexId;
+      return new URL(tezVertexURL);
+    }
+    private URL getTezTaskIdURL(String tezTaskId) throws MalformedURLException {
+      String tezTaskIdURL = _tezRoot+"TEZ_TASK_ID/"+tezTaskId;
+      return new URL(tezTaskIdURL);
+    }
+
   }
 
   private class JSONFactory {
@@ -335,41 +330,41 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
       //Iterator<Entry<String, JsonNode>> nodeIterator = configs.getFields();
       while (it.hasNext()) {
 
-         String key =  it.next();
-         
-         String val = configs.get(key).getTextValue();
-         jobConf.setProperty(key, val);
+        String key =  it.next();
+
+        String val = configs.get(key).getTextValue();
+        jobConf.setProperty(key, val);
 
       }
-   //   System.out.println("finished");
+      //   System.out.println("finished");
 
       return jobConf;
     }
-    
-   
-  
- 
+
+
+
+
 
     private TezCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
       TezCounterData holder = new TezCounterData();
 
-    //  URL tezURL = _urlFactory.getTezDAGURL(_dagId);
-    		  //new URL("http://localhost:8188/ws/v1/timeline/TEZ_DAG_ID/dag_1475423301689_0009_1");
+      //  URL tezURL = _urlFactory.getTezDAGURL(_dagId);
+      //new URL("http://localhost:8188/ws/v1/timeline/TEZ_DAG_ID/dag_1475423301689_0009_1");
       JsonNode rootNodeTez = ThreadContextTez.readJsonNode(url);
       JsonNode groupsTez = rootNodeTez.path("otherinfo").path("counters").path("counterGroups");
       for (JsonNode group : groupsTez) {
-          for (JsonNode counter : group.path("counters")) {
-            String counterName = counter.get("counterName").getValueAsText();
-            Long counterValue = counter.get("counterValue").getLongValue();
-            String groupName = group.get("counterGroupName").getValueAsText();
-            holder.set(groupName, counterName, counterValue);
+        for (JsonNode counter : group.path("counters")) {
+          String counterName = counter.get("counterName").getValueAsText();
+          Long counterValue = counter.get("counterValue").getLongValue();
+          String groupName = group.get("counterGroupName").getValueAsText();
+          holder.set(groupName, counterName, counterValue);
 
-          }
         }
+      }
       return holder;
     }
 
-   
+
 
     private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException {
 
@@ -392,140 +387,141 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
       return time;
     }
-/**
- * Does all the heavy lifiting for the DAG. Gets information from all the vertexes and tasks for a give DAG. It has a mechanism to determine whether the tasks were used 
- * for reading the data or for processing and writing to HDFS.
- * @param tezVertexList
- * @param mapperList
- * @param reducerList
- * @param scopeTaskList
- * @param dagId
- * @throws IOException
- * @throws AuthenticationException
- */
+    /**
+     * Does all the heavy lifiting for the DAG. Gets information from all the vertexes and tasks for a give DAG. It has a mechanism to determine whether the tasks were used
+     * for reading the data or for processing and writing to HDFS.
+     * @param tezVertexList
+     * @param mapperList
+     * @param reducerList
+     * @param scopeTaskList
+     * @param dagId
+     * @throws IOException
+     * @throws AuthenticationException
+     */
     private void getTaskDataAll(List<TezVertexData> tezVertexList, List<TezVertexTaskData> mapperList,
-        List<TezVertexTaskData> reducerList,List<TezVertexTaskData> scopeTaskList,URL dagId) throws IOException,AuthenticationException {
-    	JsonNode rootNode = null;
-    	try{
-       rootNode = ThreadContextTez.readJsonNode(dagId);
-    	}
+                                List<TezVertexTaskData> reducerList,List<TezVertexTaskData> scopeTaskList,URL dagId) throws IOException,AuthenticationException {
+      JsonNode rootNode = null;
+      try{
+        rootNode = ThreadContextTez.readJsonNode(dagId);
+      }
       catch(FileNotFoundException e){
-  		return;
-  	}
+        return;
+      }
 
       JsonNode vertexNode = rootNode.path("otherinfo").path("vertexNameIdMapping");
-    //  System.out.println("vertexNode is "+vertexNode);
       Iterator<JsonNode> tasks = vertexNode.iterator();
-    //  System.out.println("tasks for vertex"+tasks);
-      while (tasks.hasNext()) {
-    	JsonNode vertex = tasks.next();
-    	
+      Iterator<String> vertexNames = vertexNode.getFieldNames();
+
+      while (tasks.hasNext() && vertexNames.hasNext()) {
+
+        JsonNode vertex = tasks.next();
         String vertexId = vertex.getValueAsText();
-        System.out.println(" vertex data"+vertexId);
+        TezVertexData tezVertexData = new TezVertexData(vertexId);
+        JsonNode vertexRootNode = ThreadContextTez.readJsonNode(_urlFactory.getTezVertexURL(vertexId));
 
-    	TezVertexData tezVertexData = new TezVertexData(vertexId);
-    	JsonNode vertexRootNode = ThreadContextTez.readJsonNode(_urlFactory.getTezVertexURL(vertexId));
-     //   System.out.println(" vertex root node data"+vertexRootNode);
-        
         if(!(vertexRootNode.path("primaryfilters").get("status").getElementValue(0).getTextValue()).contains((SUCCEEDED))){
-        	break;
+          break;
         }
-     //   System.out.println(" vertex datasucceded");
 
-        String vertexName = vertexRootNode.path("otherinfo").get("vertexName").getValueAsText();
+        String vertexName = vertexNames.next();
         tezVertexData.setVertexName(vertexName);
         long startTime = 0l;
         long finishTime = 0l;
         long initialTime = 0l;
         for(JsonNode event:vertexRootNode.path("events") ){
-        //	System.out.println("vertexevents"+event);
-         	  if("VERTEX_STARTED".equals(event.get("eventtype").getValueAsText())){
-         		  
-         		  startTime=(event.get("timestamp").getValueAsLong()); 
-           //   	System.out.println("vertex start time"+startTime);
+          //	System.out.println("vertexevents"+event);
+          if("VERTEX_STARTED".equals(event.get("eventtype").getValueAsText())){
 
-         	  }
-         	  if("VERTEX_FINISHED".equals(event.get("eventtype").getValueAsText())){
-         	     finishTime=(event.get("timestamp").getValueAsLong()); 
-           //    	System.out.println("vertex finish time"+finishTime);
+            startTime=(event.get("timestamp").getValueAsLong());
+            //   	System.out.println("vertex start time"+startTime);
 
-         	  }
-         	  if("VERTEX_INITIALIZED".equals(event.get("eventtype").getValueAsText())){
-         	      initialTime = (event.get("timestamp").getValueAsLong()); 
-         	  }
-         	  
-           }
+          }
+          if("VERTEX_FINISHED".equals(event.get("eventtype").getValueAsText())){
+            finishTime=(event.get("timestamp").getValueAsLong());
+            //    	System.out.println("vertex finish time"+finishTime);
+
+          }
+          if("VERTEX_INITIALIZED".equals(event.get("eventtype").getValueAsText())){
+            initialTime = (event.get("timestamp").getValueAsLong());
+          }
+
+        }
         long time [] =  { finishTime - startTime, 0, 0, startTime, finishTime };
         tezVertexData.setTime(time);
         JsonNode groupsTez = vertexRootNode.path("otherinfo").path("counters").path("counterGroups");
         TezCounterData holder = new TezCounterData();
-        
+
         for (JsonNode group : groupsTez) {
+          for (JsonNode counter : group.path("counters")) {
+            String counterName = counter.get("counterName").getValueAsText();
+            Long counterValue = counter.get("counterValue").getLongValue();
+            String groupName = group.get("counterGroupName").getValueAsText();
+            holder.set(groupName, counterName, counterValue);
+            //  System.out.println("counter"+counterName+counterValue+groupName);
+
+          }
+        }
+        tezVertexData.setCounter(holder);
+        JsonNode tasksNode = vertexRootNode.path("relatedentities").get("TEZ_TASK_ID");
+        if(tasksNode == null) {
+          logger.warn("Task ids are not available for vertex: " + vertexId);
+        }
+
+        //   System.out.println("taskNode"+tasksNode);
+        Iterator<JsonNode> iterator = (tasksNode == null)?null:tasksNode.getElements();
+        //   System.out.println("iterator"+iterator);
+        while(iterator != null && iterator.hasNext()){
+          JsonNode taskNode = iterator.next();
+          String taskId=taskNode.getValueAsText();
+          //     System.out.println("taskId is "+taskId);
+
+          JsonNode tezTaskRootNode = ThreadContextTez.readJsonNode(_urlFactory.getTezTaskIdURL(taskId));
+          //    System.out.println("task root node  "+tezTaskRootNode);
+
+          if(!(tezTaskRootNode.path("primaryfilters").get("status").getElementValue(0).getTextValue()).contains(SUCCEEDED)){
+            break;
+          }
+
+          //    System.out.println("task succeeded");
+
+          TezVertexTaskData mapReduceTaskData = new TezVertexTaskData(taskId,
+                  tezTaskRootNode.path("relatedentities").get("TEZ_TASK_ATTEMPT_ID").getValueAsText());
+          //    System.out.println("mapreduce data"+mapReduceTaskData);
+
+          if(vertexName.contains("Map")){
+            mapperList.add(mapReduceTaskData);
+
+          }else if (vertexName.contains("scope")){
+            scopeTaskList.add(mapReduceTaskData);
+          }else{
+            reducerList.add(mapReduceTaskData);
+          }
+          for(JsonNode event:tezTaskRootNode.path("events") ){
+            if("TASK_STARTED".equals(event.get("eventtype").getValueAsText())){
+              startTime=(event.get("timestamp").getValueAsLong());
+            }
+            if("TASK_FINISHED".equals(event.get("eventtype").getValueAsText())){
+              finishTime=(event.get("timestamp").getValueAsLong());
+            }
+
+          }
+          long taskTime [] =  { finishTime - startTime, 0, 0, startTime, finishTime };
+          mapReduceTaskData.setTime(taskTime);
+          JsonNode groupsTezTask = tezTaskRootNode.path("otherinfo").path("counters").path("counterGroups");
+          TezCounterData holderTask = new TezCounterData();
+          for (JsonNode group : groupsTezTask) {
             for (JsonNode counter : group.path("counters")) {
               String counterName = counter.get("counterName").getValueAsText();
               Long counterValue = counter.get("counterValue").getLongValue();
               String groupName = group.get("counterGroupName").getValueAsText();
-              holder.set(groupName, counterName, counterValue);
-            //  System.out.println("counter"+counterName+counterValue+groupName);
+              holderTask.set(groupName, counterName, counterValue);
+              //     System.out.println("counter task"+counterName+counterValue);
+
 
             }
           }
-        tezVertexData.setCounter(holder);
-        JsonNode tasksNode = vertexRootNode.path("relatedentities").get("TEZ_TASK_ID");
-     //   System.out.println("taskNode"+tasksNode);
-        Iterator<JsonNode> iterator = tasksNode.getElements();
-     //   System.out.println("iterator"+iterator);
-        while(iterator.hasNext()){
-        	JsonNode taskNode = iterator.next(); 
-        	String taskId=taskNode.getValueAsText();
-       //     System.out.println("taskId is "+taskId);
+          mapReduceTaskData.setCounter(holderTask);
 
-        	JsonNode tezTaskRootNode = ThreadContextTez.readJsonNode(_urlFactory.getTezTaskIdURL(taskId));
-       //    System.out.println("task root node  "+tezTaskRootNode);
-
-        	if(!(tezTaskRootNode.path("primaryfilters").get("status").getElementValue(0).getTextValue()).contains(SUCCEEDED)){
-            	break;
-            }
-        	
-       //    System.out.println("task succeeded");
-
-        	TezVertexTaskData mapReduceTaskData = new TezVertexTaskData(taskId,
-        			tezTaskRootNode.path("relatedentities").get("TEZ_TASK_ATTEMPT_ID").getValueAsText());
-        //    System.out.println("mapreduce data"+mapReduceTaskData);
-        	if(vertexRootNode.path("otherinfo").get("vertexName").getValueAsText().contains("Map")){
-        	mapperList.add(mapReduceTaskData);
-        	
-        	}else if (vertexRootNode.path("otherinfo").get("vertexName").getValueAsText().contains("scope")){
-        		scopeTaskList.add(mapReduceTaskData);
-        	}else{
-        		reducerList.add(mapReduceTaskData);
-        	}
-        	 for(JsonNode event:tezTaskRootNode.path("events") ){
-            	  if("TASK_STARTED".equals(event.get("eventtype").getValueAsText())){
-            		  startTime=(event.get("timestamp").getValueAsLong()); 
-            	  }
-            	  if("TASK_FINISHED".equals(event.get("eventtype").getValueAsText())){
-            	     finishTime=(event.get("timestamp").getValueAsLong()); 
-            	  }
-            	             	  
-              }
-           long taskTime [] =  { finishTime - startTime, 0, 0, startTime, finishTime };
-           mapReduceTaskData.setTime(taskTime);
-           JsonNode groupsTezTask = tezTaskRootNode.path("otherinfo").path("counters").path("counterGroups");
-           TezCounterData holderTask = new TezCounterData();
-           for (JsonNode group : groupsTezTask) {
-               for (JsonNode counter : group.path("counters")) {
-                 String counterName = counter.get("counterName").getValueAsText();
-                 Long counterValue = counter.get("counterValue").getLongValue();
-                 String groupName = group.get("counterGroupName").getValueAsText();
-                 holderTask.set(groupName, counterName, counterValue);
-            //     System.out.println("counter task"+counterName+counterValue);
-
-
-               }
-             }
-           mapReduceTaskData.setCounter(holderTask); 
-           
         }
         TezVertexTaskData mapperData [] = mapperList.toArray(new TezVertexTaskData[mapperList.size()]);
         TezVertexTaskData reducerData [] = reducerList.toArray(new TezVertexTaskData[reducerList.size()]);
@@ -537,22 +533,22 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
         mapperList.clear();
         reducerList.clear();
         scopeTaskList.clear();
-    	tezVertexList.add(tezVertexData);
+        tezVertexList.add(tezVertexData);
 
       }
 
     }
 
-   
+
   }
 
-public String getDagId() {
-	return _dagId;
-}
+  public String getDagId() {
+    return _dagId;
+  }
 
-public void setDagId(String _dagId) {
-	this._dagId = _dagId;
-}
+  public void setDagId(String _dagId) {
+    this._dagId = _dagId;
+  }
 }
 
 final class ThreadContextTez {
@@ -574,23 +570,23 @@ final class ThreadContextTez {
     public Pattern initialValue() {
       // Example: "Task task_1443068695259_9143_m_000475 failed 1 times"
       return Pattern.compile(
-          "Task[\\s\\u00A0]+(.*)[\\s\\u00A0]+failed[\\s\\u00A0]+([0-9])[\\s\\u00A0]+times[\\s\\u00A0]+");
+              "Task[\\s\\u00A0]+(.*)[\\s\\u00A0]+failed[\\s\\u00A0]+([0-9])[\\s\\u00A0]+times[\\s\\u00A0]+");
     }
   };
 
   private static final ThreadLocal<AuthenticatedURL.Token> _LOCAL_AUTH_TOKEN =
-      new ThreadLocal<AuthenticatedURL.Token>() {
-        @Override
-        public AuthenticatedURL.Token initialValue() {
-          _LOCAL_LAST_UPDATED.set(System.currentTimeMillis());
-          // Random an interval for each executor to avoid update token at the same time
-          _LOCAL_UPDATE_INTERVAL.set(Statistics.MINUTE_IN_MS * 30 + new Random().nextLong()
-              % (3 * Statistics.MINUTE_IN_MS));
-          logger.info("Executor " + _LOCAL_THREAD_ID.get() + " update interval " + _LOCAL_UPDATE_INTERVAL.get() * 1.0
-              / Statistics.MINUTE_IN_MS);
-          return new AuthenticatedURL.Token();
-        }
-      };
+          new ThreadLocal<AuthenticatedURL.Token>() {
+            @Override
+            public AuthenticatedURL.Token initialValue() {
+              _LOCAL_LAST_UPDATED.set(System.currentTimeMillis());
+              // Random an interval for each executor to avoid update token at the same time
+              _LOCAL_UPDATE_INTERVAL.set(Statistics.MINUTE_IN_MS * 30 + new Random().nextLong()
+                      % (3 * Statistics.MINUTE_IN_MS));
+              logger.info("Executor " + _LOCAL_THREAD_ID.get() + " update interval " + _LOCAL_UPDATE_INTERVAL.get() * 1.0
+                      / Statistics.MINUTE_IN_MS);
+              return new AuthenticatedURL.Token();
+            }
+          };
 
   private static final ThreadLocal<AuthenticatedURL> _LOCAL_AUTH_URL = new ThreadLocal<AuthenticatedURL>() {
     @Override
@@ -615,6 +611,8 @@ final class ThreadContextTez {
   }
 
   public static JsonNode readJsonNode(URL url) throws IOException, AuthenticationException {
+
+    logger.info(url);
     HttpURLConnection conn = _LOCAL_AUTH_URL.get().openConnection(url, _LOCAL_AUTH_TOKEN.get());
     return _LOCAL_MAPPER.get().readTree(conn.getInputStream());
   }
