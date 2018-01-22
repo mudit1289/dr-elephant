@@ -18,30 +18,28 @@
 <!-- Quartz configurations -->
 
 <configuration>
-    <!--
     <property>
         <name>org.quartz.scheduler.instanceName</name>
-        <value>xyz</value>
+        <value>fk-dr-elephant-svc</value>
     </property>
     <property>
         <name>org.quartz.threadPool.threadCount</name>
-        <value>xyz</value>
+        <value>3</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.URL</name>
-        <value>jdbc:mysql://xyz</value>
+        <value>jdbc:mysql://10.33.233.193:3306/TT</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.user</name>
-        <value>xyz</value>
+        <value>dr</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.password</name>
-        <value>xyz</value>
+        <value>dr</value>
     </property>
     <property>
         <name>org.quartz.dataSource.quartzDataSource.maxConnections</name>
-        <value>xyz</value>
+        <value>20</value>
     </property>
-    -->
 </configuration>
