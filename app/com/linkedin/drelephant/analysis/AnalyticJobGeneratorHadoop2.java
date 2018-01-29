@@ -231,18 +231,18 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
       logger.error(e.getMessage());
       logger.error(ExceptionUtils.getStackTrace(e));
 
-//      if (analyticJob != null && analyticJob.isPrimaryPhaseRetry()) {
-//        logger.error("Add analytic job id [" + analyticJob.getAppId() + "] into the retry list.");
-//        MetricsController.triggerJobFailedEvent(analyticJob.getRetriesCount());
-//        ElephantRunner.getInstance().getExecutorService().onPrimaryRetry(analyticJob);
-//
-//      } else if (analyticJob != null && analyticJob.isSecondPhaseRetry()) {
-//        //Putting the job into a second retry queue which fetches jobs after some interval. Some spark jobs may need more time than usual to process, hence the queue.
-//        logger.error("Add analytic job id [" + analyticJob.getAppId() + "] into the second retry list.");
-//        MetricsController.triggerJobFailedEvent(analyticJob.getRetriesCount());
-//        ElephantRunner.getInstance().getExecutorService().onSecondaryRetry(analyticJob);
-//
-//      } else {
+      if (analyticJob != null && analyticJob.isPrimaryPhaseRetry()) {
+        logger.error("Add analytic job id [" + analyticJob.getAppId() + "] into the retry list.");
+        MetricsController.triggerJobFailedEvent(analyticJob.getRetriesCount());
+        ElephantRunner.getInstance().getExecutorService().onPrimaryRetry(analyticJob);
+
+      } else if (analyticJob != null && analyticJob.isSecondPhaseRetry()) {
+        //Putting the job into a second retry queue which fetches jobs after some interval. Some spark jobs may need more time than usual to process, hence the queue.
+        logger.error("Add analytic job id [" + analyticJob.getAppId() + "] into the second retry list.");
+        MetricsController.triggerJobFailedEvent(analyticJob.getRetriesCount());
+        ElephantRunner.getInstance().getExecutorService().onSecondaryRetry(analyticJob);
+
+      } else {
         if (analyticJob != null) {
           MetricsController.triggerJobRetriesExhaustionEvent();
           try {
@@ -256,7 +256,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
           logger.error("Drop the analytic job. Reason: reached the max retries for application id = ["
                   + analyticJob.getAppId() + "].");
         }
-     // }
+      }
     }
   }
 
