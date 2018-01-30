@@ -50,21 +50,30 @@ public interface AnalyticJobGenerator {
    * @throws AuthenticationException
    */
   public List<AnalyticJob> fetchAnalyticJobs()
-      throws IOException, AuthenticationException;
+          throws IOException, AuthenticationException;
 
   /**
-   * Add an AnalyticJob into retry list. Those jobs will be provided again via #fetchAnalyticJobs under
-   * the generator's decision.
-   *
-   * @param job The job to add
+   * Fetches Analytic jobs since checkpoint, executes the executor service and updates checkpoint.
+   * @param checkPoint time till which jobs have been analysed.
    */
-  public void addIntoRetries(AnalyticJob job);
+  public void fetchAndExecuteJobs(long checkPoint);
 
   /**
-   * Add an AnalyticJob into the second retry list. This queue fetches jobs on greater intervals of time. Those jobs will be provided again via #fetchAnalyticJobs under
-   * the generator's decision.
-   *
-   * @param job The job to add
+   * Do analysis of each AnalyticJob
+   * @param analyticJob Analytic job to be analysed
    */
-  public void addIntoSecondRetryQueue(AnalyticJob job);
+  public void analyseJob(AnalyticJob analyticJob);
+
+  public void waitInterval(long interval);
+
+  /**
+   * Updates the checkpoint till the time jobs have been analysed
+   */
+  public void updateCheckPoint();
+
+  /**
+   * fetches the checkpoint till the time jobs have been analysed
+   * @return checkpoint
+   */
+  public long getCheckPoint();
 }

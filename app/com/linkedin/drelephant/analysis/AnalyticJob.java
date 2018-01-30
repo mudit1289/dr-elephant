@@ -17,8 +17,11 @@
 package com.linkedin.drelephant.analysis;
 
 import com.linkedin.drelephant.ElephantContext;
+import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.util.InfoExtractor;
 import com.linkedin.drelephant.util.Utils;
+
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -32,7 +35,7 @@ import org.apache.log4j.Logger;
  * This class wraps some basic meta data of a completed application run (notice that the information is generally the
  * same regardless of hadoop versions and application types), and then promises to return the analyzed result later.
  */
-public class AnalyticJob {
+public class AnalyticJob implements Serializable {
   private static final Logger logger = Logger.getLogger(AnalyticJob.class);
 
   private static final String UNKNOWN_JOB_TYPE = "Unknown";   // The default job type when the data matches nothing.
@@ -158,6 +161,20 @@ public class AnalyticJob {
     _finishTime = finishTime;
     return this;
   }
+
+  /**
+   * Returns the secondary retries count of failed jobs
+   *
+   * @return The retries count
+   */
+  public int getSecondaryRetriesCount() { return _secondRetries; }
+
+  /**
+   * Returns the retries count of failed jobs
+   *
+   * @return The retries count
+   */
+  public int getRetriesCount() { return _retries + _secondRetries; }
 
   /**
    * Returns the application id
@@ -343,7 +360,7 @@ public class AnalyticJob {
    *
    * @return true if should retry, else false
    */
-  public boolean retry() {
+  public boolean isPrimaryPhaseRetry() {
     return (_retries++) < _RETRY_LIMIT;
   }
 }
