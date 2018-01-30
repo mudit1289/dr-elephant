@@ -34,7 +34,7 @@ CREATE TABLE failed_app_result (
   flow_exec_url    VARCHAR(800)                             COMMENT 'A url to the flow execution on the scheduler',
   job_def_url      VARCHAR(800)                             COMMENT 'A url to the job definition on the scheduler',
   flow_def_url     VARCHAR(800)                             COMMENT 'A url to the flow definition on the scheduler',
-  error            TEXT                             COMMENT 'error stack trace',
+  error            TEXT                                     COMMENT 'error stack trace',
 
   PRIMARY KEY (id)
 );
