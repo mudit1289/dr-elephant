@@ -138,7 +138,6 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
         TezVertexData[] tezVertexData=null;
         String dagId = null;
-        //TezDAGData[] tezDAGData=new TezDAGData[dagCount];
         List<TezDAGData> tezDAGDataList = new ArrayList<TezDAGData>();
         List<TezVertexTaskData> mapperList = new ArrayList<TezVertexTaskData>();
         List<TezVertexTaskData> reducerList = new ArrayList<TezVertexTaskData>();
@@ -242,9 +241,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
     private URL getJobConfigURL(String appId) throws MalformedURLException {
       appId = "tez_"+appId;
-      //System.out.println(appId+"appId");
       appId =_tezRoot+"TEZ_APPLICATION/"+appId;
-      //System.out.println(appId+"appId");
       return new URL(appId);
     }
 
@@ -275,25 +272,14 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     }
     private String getTezDAGId(String appId,int id) throws MalformedURLException {
       String dagId = appId.replace("application","dag");
-      //	System.out.println(dagId+"dagId");
       dagId =dagId+"_"+id;
-      //	System.out.println(dagId+"dagId");
       return (dagId);
     }
     private URL getTezDagSubmittedCountURL(String appId) throws MalformedURLException{
       return new URL(_applicationHistoryAddress+appId);
     }
-    private URL getTezDAGURL(String dagId) throws MalformedURLException {
-      return new URL(_tezRoot+"TEZ_DAG_ID/"+dagId);
-    }
-
-    private URL getTezVertexURL(String tezVertexId) throws MalformedURLException {
-
-      String tezVertexURL = _tezRoot+"TEZ_VERTEX_ID/"+tezVertexId;
-      return new URL(tezVertexURL);
-    }
-    private URL getTezTaskIdURL(String tezTaskId) throws MalformedURLException {
-      String tezTaskIdURL = _tezRoot+"TEZ_TASK_ID/"+tezTaskId;
+    private URL getTezTaskIdURL(String vertexId) throws MalformedURLException {
+      String tezTaskIdURL = _tezRoot + "TEZ_TASK_ID?limit=9007199254740991&primaryFilter=TEZ_VERTEX_ID:" + vertexId + "&secondaryFilter=status:SUCCEEDED";
       return new URL(tezTaskIdURL);
     }
 
@@ -355,8 +341,6 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
     private TezCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
       TezCounterData holder = new TezCounterData();
 
-      //  URL tezURL = _urlFactory.getTezDAGURL(_dagId);
-      //new URL("http://localhost:8188/ws/v1/timeline/TEZ_DAG_ID/dag_1475423301689_0009_1");
       JsonNode rootNodeTez = ThreadContextTez.readJsonNode(url);
       JsonNode groupsTez = rootNodeTez.path("otherinfo").path("counters").path("counterGroups");
       for (JsonNode group : groupsTez) {
@@ -461,8 +445,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
           }
         }
         tezVertexData.setCounter(holder);
-
-        Iterator<JsonNode> taskRootNode = ThreadContextTez.readJsonNode(new URL("http://prod-fdphadoop-bheema-hs-0001:8188/ws/v1/timeline/TEZ_TASK_ID?limit=9007199254740991&primaryFilter=TEZ_VERTEX_ID:"+vertexId+"&secondaryFilter=status:SUCCEEDED")).path("entities").getElements();
+        Iterator<JsonNode> taskRootNode = ThreadContextTez.readJsonNode( _urlFactory.getTezTaskIdURL(vertexId)).path("entities").getElements();
         while(taskRootNode.hasNext()){
           JsonNode taskNode = taskRootNode.next();
           String taskId=taskNode.get("entity").getValueAsText();
