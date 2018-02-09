@@ -34,6 +34,9 @@ $(document).ready(function(){
   var finishTimeEndDate = $("#form-finished-time-end-date");
   var finishTimeBeginTimestamp = $("#form-finished-time-begin");
   var finishTimeEndTimestamp = $("#form-finished-time-end");
+  var datetimeLabel = $("#form-datetime-label");
+  var graphType = $("#graphType");
+
 
   finishTimeBeginDate.datepicker({
     autoclose: true,
@@ -118,12 +121,38 @@ $(document).ready(function(){
       }
     }
   }
+
+  var updateJobHistoryForm = function(){
+
+     if(graphType.val() == "summary") {
+
+        datetimeEnable.prop('disabled', false);
+        datetimeLabel.prop('hidden', false);
+        datetimeEnable.show();
+        finishTimeBeginDate.show();
+        finishTimeEndDate.show();
+        finishTimeBeginTimestamp.show();
+        finishTimeEndTimestamp.show();
+     }
+     else {
+
+        datetimeLabel.prop('hidden', true);
+        datetimeEnable.hide();
+        finishTimeBeginDate.hide();
+        finishTimeEndDate.hide();
+        finishTimeBeginTimestamp.hide();
+        finishTimeEndTimestamp.hide();
+     }
+   }
+
   jobId.on("propertychange keyup input paste", updateForm);
   flowExecId.on("propertychange keyup input paste", updateForm);
   jobDefId.on("propertychange keyup input paste", updateForm);
   jobtypeEnable.change(updateForm);
   severityEnable.change(updateForm);
   datetimeEnable.change(updateForm);
+
+  graphType.change(updateJobHistoryForm)
 
   formSubmit.click(function() {
 
