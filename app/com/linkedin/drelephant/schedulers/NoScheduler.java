@@ -118,6 +118,16 @@ public class NoScheduler implements Scheduler {
   }
 
   @Override
+  public String getOrganization() {
+    return null;
+  }
+
+  @Override
+  public String getSubOrganization() {
+    return null;
+  }
+
+  @Override
   public int getWorkflowDepth() {
     return workflowDepth;
   }

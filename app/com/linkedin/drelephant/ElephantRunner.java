@@ -21,9 +21,7 @@ import com.linkedin.drelephant.analysis.AnalyticJobGeneratorHadoop2;
 import com.linkedin.drelephant.analysis.HDFSContext;
 import com.linkedin.drelephant.analysis.HadoopSystemContext;
 import com.linkedin.drelephant.executors.IExecutorService;
-import com.linkedin.drelephant.notifications.INotificationService;
 import com.linkedin.drelephant.security.HadoopSecurity;
-import com.linkedin.drelephant.templates.INotificationTemplate;
 import com.linkedin.drelephant.util.Utils;
 import controllers.MetricsController;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -45,16 +43,12 @@ public class ElephantRunner implements Runnable {
   private static final String FETCH_INTERVAL_KEY = "drelephant.analysis.fetch.interval";
   private static final String RETRY_INTERVAL_KEY = "drelephant.analysis.retry.interval";
   private static final String EXECUTOR_SERVICE = "drelephant.executor.service.class.name";
-  private static final String NOTIFICATION_SERVICE = "drelephant.notification.service.class.name";
-  private static final String NOTIFICATION_TEMPLATE = "drelephant.notification.template.class.name";
 
   private long _fetchInterval;
   private long _retryInterval;
   private HadoopSecurity _hadoopSecurity;
   private AnalyticJobGenerator _analyticJobGenerator;
   private IExecutorService _executorService;
-  private INotificationService _notificationService;
-  private INotificationTemplate _notificationTemplate;
 
   private static ElephantRunner _elephantRunner;
 
@@ -86,14 +80,6 @@ public class ElephantRunner implements Runnable {
 
   public IExecutorService getExecutorService() {
     return _executorService;
-  }
-
-  public INotificationService getNotificationService() {
-    return _notificationService;
-  }
-
-  public INotificationTemplate getNotificationTemplate() {
-    return _notificationTemplate;
   }
 
   private void loadGeneralConfiguration() {
@@ -129,28 +115,6 @@ public class ElephantRunner implements Runnable {
     }
   }
 
-  private void loadNotificationService() {
-
-    Configuration configuration = ElephantContext.instance().getGeneralConf();
-    String service = configuration.get(NOTIFICATION_SERVICE);
-    try {
-      _notificationService = (INotificationService) Class.forName(service).newInstance();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  private void loadNotificationTemplate() {
-
-    Configuration configuration = ElephantContext.instance().getGeneralConf();
-    String service = configuration.get(NOTIFICATION_TEMPLATE);
-    try {
-      _notificationTemplate = (INotificationTemplate) Class.forName(service).newInstance();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   @Override
   public void run() {
     logger.info("Dr.elephant has started");
@@ -163,8 +127,6 @@ public class ElephantRunner implements Runnable {
           loadGeneralConfiguration();
           loadAnalyticJobGenerator();
           loadExecutorService();
-          loadNotificationService();
-          loadNotificationTemplate();
           ElephantContext.init();
 
           // Initialize the metrics registries.

@@ -134,4 +134,14 @@ public class AirflowScheduler implements Scheduler {
 
   @Override
   public String getJobName() { return _taskId; }
+
+  @Override
+  public String getOrganization() {
+    return null;
+  }
+
+  @Override
+  public String getSubOrganization() {
+    return null;
+  }
 }

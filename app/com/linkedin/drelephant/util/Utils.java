@@ -16,6 +16,8 @@
 
 package com.linkedin.drelephant.util;
 
+import com.avaje.ebean.Ebean;
+import com.avaje.ebean.SqlRow;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -568,5 +570,20 @@ public final class Utils {
       datasets.add(element);
     }
     return datasets;
+  }
+
+  /**
+   * fetch all existing org names.
+   */
+  public static List<String> getOrgNames() {
+
+    String sql = "select distinct(organization) from yarn_app_result where organization != '' and organization is not null";
+    List<SqlRow> organizations = Ebean.createSqlQuery(sql)
+            .findList();
+    List<String> orgNames = new LinkedList<String>();
+    for(SqlRow row: organizations) {
+      orgNames.add(row.getString("organization"));
+    }
+    return orgNames;
   }
 }

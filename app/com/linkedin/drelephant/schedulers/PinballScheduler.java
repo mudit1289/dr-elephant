@@ -90,6 +90,16 @@ public class PinballScheduler implements Scheduler {
   }
 
   @Override
+  public String getOrganization() {
+    return null;
+  }
+
+  @Override
+  public String getSubOrganization() {
+    return null;
+  }
+
+  @Override
   public String getFlowExecUrl() {
     return Utils.formatStringOrNull("%s/jobs/?workflow=%s&instance=%s", _baseUrl, _workflowName, _workflowInstanceId);
   }

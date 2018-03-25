@@ -116,22 +116,6 @@ public class QuartzExecutorService implements IExecutorService {
                     ).startNow()
                     .build();
             _scheduler.scheduleJob(job, trigger);
-
-
-            /////////split them
-
-            job = JobBuilder.newJob(QuartzExecutorService.NotificationJob.class)
-                    .withIdentity(constructJobKey("notificationJob", NotificationJob.class.getName()))
-                    .build();
-            trigger = TriggerBuilder.newTrigger().withIdentity("NotificationTrigger")
-                    .withSchedule(
-                            simpleSchedule()
-                                    .withIntervalInMilliseconds(60000)
-                                    .repeatForever()
-                                    .withMisfireHandlingInstructionFireNow()
-                    ).startNow()
-                    .build();
-            _scheduler.scheduleJob(job, trigger);
         } catch (ObjectAlreadyExistsException e) {
             logger.error("Scheduler job already exist");
         } catch (SchedulerException e) {
@@ -161,6 +145,7 @@ public class QuartzExecutorService implements IExecutorService {
 
     @Override
     public void execute(AnalyticJob analyticJob) {
+
 
         int retryCount = analyticJob.getRetriesCount();
         try {
@@ -223,40 +208,6 @@ public class QuartzExecutorService implements IExecutorService {
         public void execute(JobExecutionContext context) throws JobExecutionException {
             _analyticJob = (AnalyticJob) context.getJobDetail().getJobDataMap().get("analyticJob");
             ElephantRunner.getInstance().getAnalyticJobGenerator().analyseJob(_analyticJob);
-        }
-    }
-
-    public static class NotificationJob implements Job {
-
-        @Override
-        public void execute(JobExecutionContext context) throws JobExecutionException {
-
-            logger.info("shubh inside notification execute");
-
-            List<AppResult> results = AppResult.find.select(AppResult.TABLE.JOB_DEF_ID + "," + AppResult.TABLE.JOB_TYPE)
-                    .where()
-                    .eq(AppResult.TABLE.SCHEDULER, "azkaban")
-                    .like(AppResult.TABLE.JOB_NAME, "%fact%")
-                    .setMaxRows(50)
-                    .findList();
-
-            logger.info("shubh size of appresult: " + results.size());
-
-            Map<String, List<String>> nameSpaceToJobDefIdMap = new LinkedHashMap<String, List<String>>();
-            for (AppResult result : results) {
-
-                if (nameSpaceToJobDefIdMap.containsKey(result.jobType)) {
-                    if (!nameSpaceToJobDefIdMap.get(result.jobType).contains(result.jobDefId)) {
-                        nameSpaceToJobDefIdMap.get(result.jobType).add(result.jobDefId);
-                    }
-                } else {
-                    List<String> list = new ArrayList<String>();
-                    list.add(result.jobDefId);
-                    nameSpaceToJobDefIdMap.put(result.jobType, list);
-                }
-            }
-
-            ElephantRunner.getInstance().getNotificationService().sendNotification(nameSpaceToJobDefIdMap);
         }
     }
 }

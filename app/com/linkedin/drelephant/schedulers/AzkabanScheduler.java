@@ -28,13 +28,15 @@ public class AzkabanScheduler implements Scheduler {
 
   private static final Logger logger = Logger.getLogger(AzkabanScheduler.class);
 
-  public static final String AZKABAN_WORKFLOW_URL = "badger.azkaban.flow.name";
-  public static final String AZKABAN_JOB_URL = "badger.mapred.fact.processId";
-  public static final String AZKABAN_EXECUTION_URL = "badger.azkaban.remote_exec.url";
-  public static final String AZKABAN_ATTEMPT_URL = "badger.mapred.fact.statsId";
-  public static final String AZKABAN_JOB_NAME = "badger.azkaban.job.name";
+  public static final String AZKABAN_WORKFLOW_URL = "azkaban.link.workflow.url";
+  public static final String AZKABAN_JOB_URL = "azkaban.link.job.url";
+  public static final String AZKABAN_EXECUTION_URL = "azkaban.link.execution.url";
+  public static final String AZKABAN_ATTEMPT_URL = "azkaban.link.attempt.url";
+  public static final String AZKABAN_JOB_NAME = "mapreduce.job.name";
 
   private String schedulerName;
+  private String organization;
+  private String subOrganization;
   private String jobDefId;
   private String jobExecId;
   private String flowDefId;
@@ -73,6 +75,8 @@ public class AzkabanScheduler implements Scheduler {
 
     workflowDepth = 0; // TODO: Add sub-workflow support
     jobName = properties.getProperty(AZKABAN_JOB_NAME);
+    organization = properties.getProperty("job.billing.org");
+    subOrganization = properties.getProperty("job.org") + "." + properties.getProperty("job.namespace");
   }
 
   @Override
@@ -128,6 +132,16 @@ public class AzkabanScheduler implements Scheduler {
   @Override
   public int getWorkflowDepth() {
     return workflowDepth;
+  }
+
+  @Override
+  public String getOrganization() {
+    return organization;
+  }
+
+  @Override
+  public String getSubOrganization() {
+    return subOrganization;
   }
 
   @Override

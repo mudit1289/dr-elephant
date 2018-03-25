@@ -100,6 +100,20 @@ public interface Scheduler {
   public String getJobName();
 
   /**
+   * Return the name of the org
+   *
+   * @return the org name
+   */
+  public String getOrganization();
+
+  /**
+   * Return the name of the sub-org
+   *
+   * @return the sub-org name
+   */
+  public String getSubOrganization();
+
+  /**
    * Return the workflow depth
    *
    * @return the workflow depth

@@ -16,34 +16,23 @@
 
 package controllers;
 
+import com.avaje.ebean.Ebean;
 import com.avaje.ebean.ExpressionList;
 import com.avaje.ebean.Query;
-
+import com.avaje.ebean.SqlRow;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.linkedin.drelephant.ElephantContext;
+import com.linkedin.drelephant.analysis.HeuristicDetails;
+import com.linkedin.drelephant.analysis.JobDetails;
 import com.linkedin.drelephant.analysis.Metrics;
 import com.linkedin.drelephant.analysis.Severity;
 import com.linkedin.drelephant.util.Utils;
-
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-
 import models.AppHeuristicResult;
-import models.AppHeuristicSummary;
 import models.AppResult;
-
-import models.AppSummary;
 import org.apache.commons.collections.map.ListOrderedMap;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.message.BasicNameValuePair;
@@ -55,23 +44,19 @@ import play.libs.Json;
 import play.mvc.Controller;
 import play.mvc.Result;
 import views.html.help.metrics.helpRuntime;
-import views.html.help.metrics.helpWaittime;
 import views.html.help.metrics.helpUsedResources;
+import views.html.help.metrics.helpWaittime;
 import views.html.help.metrics.helpWastedResources;
 import views.html.index;
-import views.html.page.comparePage;
-import views.html.page.flowHistoryPage;
-import views.html.page.helpPage;
-import views.html.page.homePage;
-import views.html.page.jobHistoryPage;
-import views.html.page.searchPage;
+import views.html.page.*;
 import views.html.results.*;
 
-import views.html.page.oldFlowHistoryPage;
-import views.html.page.oldJobHistoryPage;
-import views.html.page.oldHelpPage;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
-import com.google.gson.*;
+import static java.lang.StrictMath.max;
+import static java.lang.StrictMath.min;
 
 
 public class Application extends Controller {
@@ -85,13 +70,18 @@ public class Application extends Controller {
   private static final int JOB_HISTORY_LIMIT = 5000;          // Set to avoid memory error.
   private static final int MAX_HISTORY_LIMIT = 15;            // Upper limit on the number of executions to display
   private static final int STAGE_LIMIT = 25;                  // Upper limit on the number of stages to display
+  private static final int MAX_VALUE = 4;                     // Upper limit for normalization of score
+  private static final int MIN_VALUE = 1;                     // Lower limit for normalization of score
+
 
   // Form and Rest parameters
   public static final String APP_ID = "id";
   public static final String FLOW_DEF_ID = "flow-def-id";
   public static final String FLOW_EXEC_ID = "flow-exec-id";
   public static final String JOB_DEF_ID = "job-def-id";
-  public static final String JOB_HISTORY_JOB_DEF_ID = "job-history-job-def-id";
+  public static final String JOB_ANALYSIS_JOB_DEF_ID = "job-analysis-job-def-id";
+  public static final String ORG = "org-analysis-org";
+  public static final String SUB_ORG = "org-analysis-sub_org";
   public static final String USERNAME = "username";
   public static final String QUEUE_NAME = "queue-name";
   public static final String SEVERITY = "severity";
@@ -658,214 +648,182 @@ public class Application extends Controller {
   }
 
   /**
-   * This method provides the aggregated summary of job runs based upon list of job_def_ids, start time and end time.
-   *
-   * @throws Exception if the analysis process encountered a problem.
-   * @return List of AppSummary
+   * @param score score
+   * @param maxScore maximum score
+   * @param minScore minimum scaore
+   * @return normalized value of score
    */
-  public static List<AppSummary> getAppHeuristicReport(ArrayList<String> jobDefIdLst, String finishedTimeBegin, String finishedTimeEnd) throws Exception {
+  private static long normalize(float score, float maxScore, float minScore) {
 
-    return processAppHeuristicReport(getAppDetails(jobDefIdLst, finishedTimeBegin, finishedTimeEnd));
+    return  (long) ((MAX_VALUE-MIN_VALUE) / (maxScore-minScore) * (score-maxScore) + MAX_VALUE);
   }
 
   /**
-   * This method extract the details of jobs based upon list of job_def_ids, start time and end time.
+   * Returns the job analysis.
    *
-   * @throws Exception if the extraction process encountered a problem.
-   * @return List of AppResult
+   * @return The job analysis page.
    */
-  public static List<AppResult> getAppDetails(ArrayList<String> jobDefIdLst, String finishedTimeBegin, String finishedTimeEnd) throws Exception {
+  public static Result jobAnalysis() {
 
-    ExpressionList<AppResult> query = AppResult.find.select("*")
-            .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
-            .where();
+    DynamicForm form = Form.form().bindFromRequest(request());
+    String jobDefId = form.get(JOB_ANALYSIS_JOB_DEF_ID);
+    jobDefId = (jobDefId != null) ? jobDefId.trim() : null;
 
-    if (Utils.isSet(finishedTimeBegin)) {
-      long time = parseTime(finishedTimeBegin);
-      if (time > 0) {
-        query = query.ge(AppResult.TABLE.FINISH_TIME, finishedTimeBegin);
-      }
+    long finishedTimeBegin = Utils.isSet(form.get(FINISHED_TIME_BEGIN)) ? Long.parseLong(form.get(FINISHED_TIME_BEGIN)) : Long.MIN_VALUE;
+    long finishedTimeEnd = Utils.isSet(form.get(FINISHED_TIME_END)) ? Long.parseLong(form.get(FINISHED_TIME_END)) : Long.MAX_VALUE;
+
+    if (!Utils.isSet(jobDefId)) {
+      return ok(jobAnalysisPage.render(jobDefId, finishedTimeBegin, finishedTimeEnd,
+              jobAnalysisResults.render(null, null, null, null)));
     }
 
-    if (Utils.isSet(finishedTimeEnd)) {
-      long time = parseTime(finishedTimeEnd);
-      if (time > 0) {
-        query = query.le(AppResult.TABLE.FINISH_TIME, finishedTimeEnd);
-      }
-    }
+    String sql = "select table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score, avg(critical_severity) as critical_severity, avg(severe_severity) as severe_severity, avg(moderate_severity) as moderate_severity from\n" +
+            "(select a.job_def_id, a.job_exec_id, b.heuristic_name, sum(b.score) as heuristic_score, sum(CASE WHEN b.severity = 4 then 1 ELSE 0 END) as critical_severity, sum(CASE WHEN b.severity = 3 then 1 ELSE 0 END) as severe_severity, sum(CASE WHEN b.severity = 2 then 1 ELSE 0 END) as moderate_severity from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where a.job_def_id = :job_def_id and a.finish_time>= :finished_time_begin and a.finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name) as table1 \n" +
+            "group by table1.job_def_id, table1.heuristic_name having heuristic_score>0";
 
-    List<AppResult> appResults = query
-            .in(AppResult.TABLE.JOB_DEF_ID, jobDefIdLst)
-            .orderBy(AppResult.TABLE.FINISH_TIME)
+    List<SqlRow> list = Ebean.createSqlQuery(sql)
+            .setParameter("job_def_id", jobDefId)
+            .setParameter("finished_time_begin", finishedTimeBegin)
+            .setParameter("finished_time_end", finishedTimeEnd)
             .findList();
 
-    return appResults;
-  }
+    long maxScore = 0, minScore =0;
+    ArrayList<HeuristicDetails> heuristicDetailsList= new ArrayList<HeuristicDetails>();
+    for (SqlRow row : list) {
+      HeuristicDetails heuristicDetails = new HeuristicDetails();
+      heuristicDetails.setHeuristicName(row.getString("heuristic_name"));
+      heuristicDetails.setScore(row.getLong("heuristic_score"));
+      heuristicDetails.setCriticalSeverity(row.getInteger("critical_severity"));
+      heuristicDetails.setSevereSeverity(row.getInteger("severe_severity"));
+      heuristicDetails.setModerateSeverity(row.getInteger("moderate_severity"));
 
-  /**
-   * This method finds the stage of any particular Job run
-   *
-   * @throws Exception if the processing encountered a problem.
-   * @return Map<String,Integer>
-   */
-  public static Map<String,Integer> getStageDetails(List<AppResult> appResultLst) throws Exception {
+      maxScore = max(maxScore, heuristicDetails.getScore());
+      minScore = min(minScore, heuristicDetails.getScore());
 
-    int noOfStage;
-
-    // Setting Stage number corresponding to each application id
-    Map<String, Integer> appIdStageMap = new LinkedHashMap<String, Integer>(); // For storing job_def_id and total numbers of stage mapping
-    Map<String, Integer> tempJobExeStageMap = new LinkedHashMap<String, Integer>(); // To store job_exec_id and its latest stage counter
-    for (AppResult appResult : appResultLst){
-      if(tempJobExeStageMap.containsKey(appResult.jobExecId)){
-        noOfStage = tempJobExeStageMap.get(appResult.jobExecId) + 1;
-      }
-      else{
-        noOfStage = 1;
-      }
-      tempJobExeStageMap.put(appResult.jobExecId,noOfStage);
-      appIdStageMap.put(appResult.id,noOfStage);
+      heuristicDetailsList.add(heuristicDetails);
     }
 
-    return appIdStageMap;
-  }
+    Iterator<HeuristicDetails> heuristicDetailsListIterator = heuristicDetailsList.iterator();
 
-  /**
-   * Returns the processed heuristics report for job_def_ids that could be directly used to display to the user.
-   *
-   * This method processes the given list of AppResults and calculates the aggregated summary of all the runs for any job_def_id.
-   *
-   * @throws Exception if the analysis process encountered a problem.
-   * @return the analysed list of AppSummary
-   */
-  public static List<AppSummary> processAppHeuristicReport(List<AppResult> appResultLst) throws Exception {
-
-    List<AppSummary> appSummaryLst = new LinkedList<AppSummary>(); // Contains the final result
-    if(null != appResultLst && !appResultLst.isEmpty() && appResultLst.size() > 0) {
-
-      Map<String, AppSummary> appSummaryMap = new LinkedHashMap<String, AppSummary>(); // Contains summary of all runs for job_def_id stage specific
-      Map<String, AppHeuristicSummary> appHeuristicSummaryMap = null; // Contains summary of individual heuristic runs for job_def_id stage specific
-
-      // Getting map of application id and it's corresponding stage number
-      Map<String, Integer> appId_Stage_Map = getStageDetails(appResultLst);
-
-      AppSummary appSummary = null;
-      String job_def_stage_id = null;
-      for (AppResult appResult : appResultLst) {
-        job_def_stage_id = appResult.jobDefId + "_" + appId_Stage_Map.get(appResult.id);
-
-        // Initializing AppSummary with all the details
-        if (appSummaryMap.containsKey(job_def_stage_id)) {
-
-          appSummary = appSummaryMap.get(job_def_stage_id);
-          appHeuristicSummaryMap = appSummary.getAppHeuristicSummaryMap();
-        } else {
-          appSummary = new AppSummary();
-          appHeuristicSummaryMap = new LinkedHashMap<String, AppHeuristicSummary>();
-
-          appSummary.setJobDefId(appResult.jobDefId);
-          appSummary.setJobName(appResult.jobName);
-          appSummary.setJobType(appResult.jobType);
-          appSummary.setStage(appId_Stage_Map.get(appResult.id));
-        }
-        appSummary.setTotalRuns(appSummary.getTotalRuns() + 1);
-
-        if (appResult.severity.getValue() > 0) {
-          appSummary.setTotalRunsWithIssues(appSummary.getTotalRunsWithIssues() + 1);
-
-          if (appResult.severity.getValue() == 4) {
-            appSummary.setCriticalRuns(appSummary.getCriticalRuns() + 1);
-          } else if (appResult.severity.getValue() == 3) {
-            appSummary.setSevereRuns(appSummary.getSevereRuns() + 1);
-          } else if (appResult.severity.getValue() == 2) {
-            appSummary.setModerateRuns(appSummary.getModerateRuns() + 1);
-          } else if (appResult.severity.getValue() == 1) {
-            appSummary.setLowRuns(appSummary.getLowRuns() + 1);
-          }
-
-        } else {
-          appSummary.setNormalRuns(appSummary.getNormalRuns() + 1);
-        }
-
-        // Updating individual heuristics information corresponding to job_def_id
-        String heuristic = null;
-        AppHeuristicSummary appHeuristicSummary = null;
-        for (AppHeuristicResult appHeuristicResult : appResult.yarnAppHeuristicResults) {
-
-          heuristic = appHeuristicResult.heuristicName;
-
-          if (appHeuristicSummaryMap.containsKey(heuristic)) {
-            appHeuristicSummary = appHeuristicSummaryMap.get(heuristic);
-          } else {
-            appHeuristicSummary = new AppHeuristicSummary();
-            appHeuristicSummary.setHeuristicName(heuristic);
-          }
-
-
-          if (appHeuristicResult.severity.getValue() > 0) {
-            appSummary.setTotalIssues(appSummary.getTotalIssues() + 1);
-
-            if (appHeuristicResult.severity.getValue() == 4) {
-              appHeuristicSummary.setCriticalIssues(appHeuristicSummary.getCriticalIssues() + 1);
-            } else if (appHeuristicResult.severity.getValue() == 3) {
-              appHeuristicSummary.setSevereIssues(appHeuristicSummary.getSevereIssues() + 1);
-            } else if (appHeuristicResult.severity.getValue() == 2) {
-              appHeuristicSummary.setModerateIssues(appHeuristicSummary.getModerateIssues() + 1);
-            } else if (appHeuristicResult.severity.getValue() == 1) {
-              appHeuristicSummary.setLowIssues(appHeuristicSummary.getLowIssues() + 1);
-            }
-
-          } else {
-            appHeuristicSummary.setNormalIssues(appHeuristicSummary.getNormalIssues() + 1);
-          }
-
-          appHeuristicSummaryMap.put(heuristic, appHeuristicSummary);
-        }
-
-        appSummary.setAppHeuristicSummaryMap(appHeuristicSummaryMap);
-
-        appSummaryMap.put(job_def_stage_id, appSummary);
-      }
-
-      // Sorting based upon the total_runs_with_issues in descending order
-      Map<String, Integer> unsortMap = new HashMap<String, Integer>();
-
-      for (Map.Entry<String, AppSummary> entry : appSummaryMap.entrySet()) {
-        unsortMap.put(entry.getKey(), entry.getValue().getTotalIssues());
-      }
-
-      // Getting sorted map of job_def_id based upon descending order of total runs having issues
-      Map<String, Integer> sortedMap = sortMapDescendingOrderByValue(unsortMap);
-
-      for (Map.Entry<String, Integer> entry : sortedMap.entrySet()) {
-        if (appSummaryMap.containsKey(entry.getKey())) {
-          appSummaryLst.add(appSummaryMap.get(entry.getKey()));
-        }
+    HeuristicDetails heuristicDetails;
+    long normalizedScore;
+    int criticalHeuristics = 0,  severeHeuristics = 0;
+    while(heuristicDetailsListIterator.hasNext()) {
+      heuristicDetails = heuristicDetailsListIterator.next();
+      normalizedScore =  normalize(heuristicDetails.getScore(), maxScore, minScore);
+      if(normalizedScore == 4) {
+        heuristicDetails.setSeverity(Severity.CRITICAL);
+        criticalHeuristics = criticalHeuristics + 1;
+      } else if(normalizedScore == 3) {
+        heuristicDetails.setSeverity(Severity.SEVERE);
+        severeHeuristics = severeHeuristics + 1;
+      } else if(normalizedScore == 2) {
+        heuristicDetails.setSeverity(Severity.MODERATE);
+      } else if(normalizedScore == 1) {
+        heuristicDetails.setSeverity(Severity.LOW);
       }
     }
 
-    return appSummaryLst;
+    return ok(jobAnalysisPage.render(jobDefId, finishedTimeBegin, finishedTimeEnd,
+            jobAnalysisResults.render(heuristicDetailsList, heuristicDetailsList.size(), criticalHeuristics, severeHeuristics)));
   }
 
   /**
-   * Returns the sorted input map in descending order.
+   * Returns the org analysis.
    *
-   * @throws Exception if the sorting process encountered a problem.
-   * @return the sorted Map<String, Integer> based upon the value, in descending order.
+   * @return The org analysis page.
    */
-  private static Map<String, Integer> sortMapDescendingOrderByValue(Map<String, Integer> inputMap) throws Exception{
+  public static Result orgAnalysis() {
 
-    List<Map.Entry<String, Integer>> list = new LinkedList<Map.Entry<String, Integer>>(inputMap.entrySet());
-    Collections.sort(list, new Comparator<Map.Entry<String, Integer>>() {
-      public int compare(Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2) {
-        return (o2.getValue()).compareTo(o1.getValue());
-      }
-    });
-    Map<String, Integer> sortedMap = new LinkedHashMap<String, Integer>();
-    for (Map.Entry<String, Integer> entry : list) {
-      sortedMap.put(entry.getKey(), entry.getValue());
+    DynamicForm form = Form.form().bindFromRequest(request());
+    String org = form.get(ORG);
+    String subOrg = form.get(SUB_ORG);
+    org = (org != null) ? org.trim() : null;
+    subOrg = (subOrg != null) ? subOrg.trim() : null;
+
+    long finishedTimeBegin = Utils.isSet(form.get(FINISHED_TIME_BEGIN)) ? Long.parseLong(form.get(FINISHED_TIME_BEGIN)) : Long.MIN_VALUE;
+    long finishedTimeEnd = Utils.isSet(form.get(FINISHED_TIME_END)) ? Long.parseLong(form.get(FINISHED_TIME_END)) : Long.MAX_VALUE;
+
+
+    if (!Utils.isSet(org)) {
+      return ok(orgAnalysisPage.render(org, subOrg, finishedTimeBegin, finishedTimeEnd,
+              orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, null, null, null)));
     }
-    return sortedMap;
+
+    String sql = "select table8.job_runs, table8.job_def_id, table8.organization, table8.sub_organization, table8.job_type, table8.scheduler, table8.username, table8.job_name, table8.job_runs, table8.queue_name, table8.score, table8.resource_used, table8.resource_wasted, table8.total_delay, table9.heuristic_name from\n" +
+            "(select count(a.job_def_id) as job_runs, a.job_def_id, a.organization, a.sub_organization, a.job_type, a.scheduler, a.username, a.job_name, a.queue_name, avg(a.score) as score, avg(a.resource_used) as resource_used, avg(a.resource_wasted) as resource_wasted, avg(a.total_delay) as total_delay from ( select job_def_id, organization, sub_organization, job_type, queue_name, scheduler, username, job_name, sum(score) as score, sum(resource_used) as resource_used, sum(resource_wasted) as resource_wasted, sum(total_delay) as total_delay from yarn_app_result where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by job_def_id, job_exec_id ) as a group by job_def_id having score > 0) as table8\n" +
+            "join\n" +
+            "(select table2.job_def_id, table2.heuristic_name, table2.heuristic_score from\n" +
+            "(\n" +
+            "select table2.job_def_id, max(table2.heuristic_score) as heuristic_score from\n" +
+            "(\n" +
+            "select table1.job_def_id, table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score from\n" +
+            "(select a.job_def_id, a.job_exec_id,b.heuristic_name,sum(b.score) as heuristic_score from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name\n" +
+            ") as table1 \n" +
+            "group by table1.job_def_id, table1.heuristic_name\n" +
+            ") as table2\n" +
+            "group by table2.job_def_id\n" +
+            ") as table3\n" +
+            "inner join \n" +
+            "(\n" +
+            "select table1.job_def_id, table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score from\n" +
+            "(select a.job_def_id, a.job_exec_id,b.heuristic_name,sum(b.score) as heuristic_score from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name\n" +
+            ") as table1 \n" +
+            "group by table1.job_def_id, table1.heuristic_name\n" +
+            ") as table2\n" +
+            "on table2.job_def_id = table3.job_def_id and table2.heuristic_score = table3.heuristic_score and table3.heuristic_score != 0) as table9\n" +
+            "on table8.job_def_id = table9.job_def_id";
+
+    List<SqlRow> list = Ebean.createSqlQuery(sql)
+            .setParameter("org", org)
+            .setParameter("sub_org", subOrg)
+            .setParameter("finished_time_begin", finishedTimeBegin)
+            .setParameter("finished_time_end", finishedTimeEnd)
+            .findList();
+
+    long maxScore = 0, minScore = 0;
+    List<JobDetails> jobDetailsList = new LinkedList<JobDetails>();
+    for (SqlRow row : list) {
+      JobDetails jobDetails = new JobDetails();
+      jobDetails.setJobDefId(row.getString("job_def_id"));
+      jobDetails.setJobName(row.getString("job_name"));
+      jobDetails.setJobType(row.getString("job_type"));
+      jobDetails.setUserName(row.getString("username"));
+      jobDetails.setQueueName(row.getString("queue_name"));
+      jobDetails.setScheduler(row.getString("scheduler"));
+      jobDetails.setWorstHeuristic(row.getString("heuristic_name"));
+      jobDetails.setJobRuns(row.getInteger("job_runs"));
+      jobDetails.setScore(row.getLong("score"));
+      jobDetails.setResourceUsed(row.getLong("resource_used"));
+      jobDetails.setResourceWasted(row.getLong("resource_wasted"));
+      jobDetails.setTotalDelay(row.getLong("total_delay"));
+
+      maxScore = max(maxScore, jobDetails.getScore());
+      minScore = min(minScore, jobDetails.getScore());
+
+      jobDetailsList.add(jobDetails);
+    }
+
+    long normalizedScore, criticalJobs = 0, severeJobs = 0;
+    for(JobDetails jobDetails: jobDetailsList) {
+      normalizedScore =  normalize(jobDetails.getScore(), maxScore, minScore);
+      if(normalizedScore == 4) {
+        jobDetails.setSeverity(Severity.CRITICAL);
+        criticalJobs = criticalJobs + 1;
+      } else if(normalizedScore == 3) {
+        jobDetails.setSeverity(Severity.SEVERE);
+        severeJobs = severeJobs + 1;
+      } else if(normalizedScore == 2) {
+        jobDetails.setSeverity(Severity.MODERATE);
+      } else if(normalizedScore == 1) {
+        jobDetails.setSeverity(Severity.LOW);
+      }
+    }
+
+    return ok(orgAnalysisPage.render(org, subOrg, finishedTimeBegin, finishedTimeEnd,
+            orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, jobDetailsList, criticalJobs, severeJobs)));
   }
+
 
   /**
    * Controls Job History. Displays at max MAX_HISTORY_LIMIT executions. Old version of the job history
@@ -889,7 +847,7 @@ public class Application extends Controller {
    */
   private static Result getJobHistory(Version version) {
     DynamicForm form = Form.form().bindFromRequest(request());
-    String partialJobDefId = form.get(JOB_HISTORY_JOB_DEF_ID);
+    String partialJobDefId = form.get(JOB_DEF_ID);
     partialJobDefId = (partialJobDefId != null) ? partialJobDefId.trim() : null;
 
     boolean hasSparkJob = false;
@@ -897,136 +855,104 @@ public class Application extends Controller {
     String graphType = form.get("select-graph-type");
 
     if (graphType == null) {
-      graphType = "summary";
+      graphType = "resources";
     }
-
-    String finishedTimeBegin = "";
-    String finishedTimeEnd = "";
-    int maxStages = 0;
-    List<String> heuristics = new LinkedList<String>();
-    List<AppSummary> appSummaries = null;
-    List<Long> flowExecTimeList = new ArrayList<Long>();
-    Map<IdUrlPair, List<AppResult>> executionMap = new LinkedHashMap<IdUrlPair, List<AppResult>>();
 
     if (!Utils.isSet(partialJobDefId)) {
       if (version.equals(Version.NEW)) {
         return ok(
-            jobHistoryPage.render(partialJobDefId, graphType, jobHistoryResults.render(null, null, -1, null)));
+                jobHistoryPage.render(partialJobDefId, graphType, jobHistoryResults.render(null, null, -1, null)));
       } else {
-        return ok(oldJobHistoryPage.render(partialJobDefId, graphType, null, null, oldJobHistoryResults.render(null, null, -1, null)));
+        return ok(oldJobHistoryPage.render(partialJobDefId, graphType, oldJobHistoryResults.render(null, null, -1, null)));
       }
     }
     IdUrlPair jobDefPair = bestSchedulerInfoMatchGivenPartialId(partialJobDefId, AppResult.TABLE.JOB_DEF_ID);
 
-    if(graphType.equals("summary")) {
+    List<AppResult> results;
 
-      finishedTimeBegin = form.get(FINISHED_TIME_BEGIN);
-      finishedTimeEnd = form.get(FINISHED_TIME_END);
-      ArrayList<String> jobDefIds = new ArrayList<String>();
-      jobDefIds.add(partialJobDefId);
-      try {
-        appSummaries = getAppHeuristicReport(jobDefIds, finishedTimeBegin, finishedTimeEnd);
-      } catch (Exception e) {
-        return notFound("Exception: " + e);
-      }
-
-      if(appSummaries == null || appSummaries.isEmpty()){
-        return notFound("Job didn't run in the given time range");
-      }
-
-      Map<String, AppHeuristicSummary> appHeuristicSummaryMap = appSummaries.get(0).getAppHeuristicSummaryMap();
-      for (Map.Entry<String, AppHeuristicSummary> entry : appHeuristicSummaryMap.entrySet()) {
-        heuristics.add(entry.getKey());
-      }
+    if (graphType.equals("time") || graphType.equals("resources")) {
+      // we don't need APP_HEURISTIC_RESULT_DETAILS data to plot for time and resources
+      results = AppResult.find.select(
+              AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
+              .where()
+              .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
+              .order()
+              .desc(AppResult.TABLE.FINISH_TIME)
+              .setMaxRows(JOB_HISTORY_LIMIT)
+              .findList();
     } else {
+      // Fetch all job executions
+      results = AppResult.find.select(
+              AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
+              .where()
+              .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
+              .order()
+              .desc(AppResult.TABLE.FINISH_TIME)
+              .setMaxRows(JOB_HISTORY_LIMIT)
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
+              .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS, "*")
+              .findList();
+    }
 
-      List<AppResult> results;
-
-      if (graphType.equals("time") || graphType.equals("resources")) {
-        // we don't need APP_HEURISTIC_RESULT_DETAILS data to plot for time and resources
-        results = AppResult.find.select(
-                AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
-                .where()
-                .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
-                .order()
-                .desc(AppResult.TABLE.FINISH_TIME)
-                .setMaxRows(JOB_HISTORY_LIMIT)
-                .findList();
-      } else {
-        // Fetch all job executions
-        results = AppResult.find.select(
-                AppResult.getSearchFields() + "," + AppResult.TABLE.FLOW_EXEC_ID + "," + AppResult.TABLE.FLOW_EXEC_URL)
-                .where()
-                .eq(AppResult.TABLE.JOB_DEF_ID, jobDefPair.getId())
-                .order()
-                .desc(AppResult.TABLE.FINISH_TIME)
-                .setMaxRows(JOB_HISTORY_LIMIT)
-                .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS, "*")
-                .fetch(AppResult.TABLE.APP_HEURISTIC_RESULTS + "." + AppHeuristicResult.TABLE.APP_HEURISTIC_RESULT_DETAILS, "*")
-                .findList();
-      }
-
-      for (AppResult result : results) {
-        if (result.jobType.equals("Spark")) {
-          hasSparkJob = true;
-        }
-      }
-
-      if (results.size() == 0) {
-        return notFound("Unable to find record for job def id: " + jobDefPair.getId());
-      }
-      Map<IdUrlPair, List<AppResult>> flowExecIdToJobsMap = ControllerUtil
-              .limitHistoryResults(ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID),
-                      results.size(), MAX_HISTORY_LIMIT);
-
-      // Compute job execution data
-      for (Map.Entry<IdUrlPair, List<AppResult>> entry : flowExecIdToJobsMap.entrySet()) {
-
-        // Reverse the list content from desc order of finish time to increasing order so that when grouping we get
-        // the job list in the order of completion.
-        List<AppResult> mrJobsList = Lists.reverse(entry.getValue());
-
-        // Get the finish time of the last mr job that completed in current flow.
-        flowExecTimeList.add(mrJobsList.get(mrJobsList.size() - 1).finishTime);
-
-        // Find the maximum number of mr stages for any job execution
-        int stageSize = flowExecIdToJobsMap.get(entry.getKey()).size();
-        if (stageSize > maxStages) {
-          maxStages = stageSize;
-        }
-
-        executionMap.put(entry.getKey(), Lists.reverse(flowExecIdToJobsMap.get(entry.getKey())));
-      }
-      if (maxStages > STAGE_LIMIT) {
-        maxStages = STAGE_LIMIT;
+    for (AppResult result : results) {
+      if (result.jobType.equals("Spark")) {
+        hasSparkJob = true;
       }
     }
 
+    if (results.size() == 0) {
+      return notFound("Unable to find record for job def id: " + jobDefPair.getId());
+    }
+    Map<IdUrlPair, List<AppResult>> flowExecIdToJobsMap = ControllerUtil
+            .limitHistoryResults(ControllerUtil.groupJobs(results, ControllerUtil.GroupBy.FLOW_EXECUTION_ID),
+                    results.size(), MAX_HISTORY_LIMIT);
+
+    // Compute job execution data
+    List<Long> flowExecTimeList = new ArrayList<Long>();
+    int maxStages = 0;
+    Map<IdUrlPair, List<AppResult>> executionMap = new LinkedHashMap<IdUrlPair, List<AppResult>>();
+    for (Map.Entry<IdUrlPair, List<AppResult>> entry : flowExecIdToJobsMap.entrySet()) {
+
+      // Reverse the list content from desc order of finish time to increasing order so that when grouping we get
+      // the job list in the order of completion.
+      List<AppResult> mrJobsList = Lists.reverse(entry.getValue());
+
+      // Get the finish time of the last mr job that completed in current flow.
+      flowExecTimeList.add(mrJobsList.get(mrJobsList.size() - 1).finishTime);
+
+      // Find the maximum number of mr stages for any job execution
+      int stageSize = flowExecIdToJobsMap.get(entry.getKey()).size();
+      if (stageSize > maxStages) {
+        maxStages = stageSize;
+      }
+
+      executionMap.put(entry.getKey(), Lists.reverse(flowExecIdToJobsMap.get(entry.getKey())));
+    }
+    if (maxStages > STAGE_LIMIT) {
+      maxStages = STAGE_LIMIT;
+    }
     if (version.equals(Version.NEW)) {
       if (graphType.equals("heuristics")) {
         return ok(jobHistoryPage.render(jobDefPair.getId(), graphType,
-            jobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
+                jobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
       } else if (graphType.equals("resources") || graphType.equals("time")) {
-          return ok(jobHistoryPage.render(jobDefPair.getId(), graphType,
-              jobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
+        return ok(jobHistoryPage.render(jobDefPair.getId(), graphType,
+                jobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
       }
     } else {
       if (graphType.equals("heuristics")) {
-        return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType, null, null,
+        return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType,
                 oldJobHistoryResults.render(jobDefPair, executionMap, maxStages, flowExecTimeList)));
       } else if (graphType.equals("resources") || graphType.equals("time")) {
         if (hasSparkJob) {
           return notFound("Resource and time graph are not supported for spark right now");
         } else {
-          return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType, null, null,
+          return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType,
                   oldJobMetricsHistoryResults.render(jobDefPair, graphType, executionMap, maxStages, flowExecTimeList)));
         }
-      } else {
-        return ok(oldJobHistoryPage.render(jobDefPair.getId(), graphType, finishedTimeBegin, finishedTimeEnd,
-                oldjobSummaryHistoryResults.render(jobDefPair, heuristics, appSummaries)));
       }
     }
-   return notFound("Unable to find graph type: " + graphType);
+    return notFound("Unable to find graph type: " + graphType);
   }
 
 
@@ -1182,50 +1108,6 @@ public class Application extends Controller {
     }
 
     return ok(Json.toJson(resMap));
-  }
-
-  public static Result restJobSummary() {
-
-    ArrayList<String> jobDefIds;
-    String finishedTimeBegin = "";
-    String finishedTimeEnd = "";
-
-    if (request().queryString().containsKey(JOB_HISTORY_JOB_DEF_ID)) {
-      jobDefIds = new ArrayList<String>(Arrays.asList(request().queryString().get(JOB_HISTORY_JOB_DEF_ID)[0].split(",")));
-    } else {
-      return notFound("job definition id not found");
-    }
-    if (request().queryString().containsKey(FINISHED_TIME_BEGIN)) {
-      finishedTimeBegin = request().queryString().get(FINISHED_TIME_BEGIN)[0];
-    }
-    if (request().queryString().containsKey(FINISHED_TIME_END)) {
-      finishedTimeEnd = request().queryString().get(FINISHED_TIME_END)[0];
-    }
-
-    List<AppSummary> appSummaries;
-    try {
-      appSummaries = getAppHeuristicReport(jobDefIds, finishedTimeBegin, finishedTimeEnd);
-    } catch (Exception e) {
-      return notFound("Exception: " + e);
-    }
-
-    if (appSummaries.size() == 0) {
-      return notFound("Unable to find record");
-    } else {
-
-      Map<String, List<AppSummary>> groupMap = new LinkedHashMap<String, List<AppSummary>>();
-      for (AppSummary appSummary : appSummaries) {
-
-        if (groupMap.containsKey(appSummary.getJobDefId())) {
-          groupMap.get(appSummary.getJobDefId()).add(appSummary);
-        } else {
-          List<AppSummary> list = new ArrayList<AppSummary>();
-          list.add(appSummary);
-          groupMap.put(appSummary.getJobDefId(), list);
-        }
-      }
-      return ok(Json.toJson(groupMap));
-    }
   }
 
 
@@ -1505,7 +1387,7 @@ public class Application extends Controller {
       int jobPerfScore = 0;
       JsonArray stageScores = new JsonArray();
       List<AppResult> mrJobsList = Lists.reverse(flowExecIdToJobsMap.get(flowExecPair));
-      for (AppResult appResult : flowExecIdToJobsMap.get(flowExecPair)) {
+      for (AppResult appResult : mrJobsList) {
 
         // Each MR job triggered by jobDefId for flowExecId
         int mrPerfScore = 0;
@@ -1534,6 +1416,135 @@ public class Application extends Controller {
     JsonArray sortedDatasets = Utils.sortJsonArray(datasets);
 
     return ok(new Gson().toJson(sortedDatasets));
+  }
+
+  /**
+   * The data for populating select options for sub-org for a particular org on job analysis page. While populating the
+   * details an ajax call is made to this to fetch the data.
+   *
+   * Data Returned:
+   * <pre>
+   * {@code
+   *   [
+   *     {
+   *       "subOrg": x,
+   *     },
+   *     {
+   *       "subOrg": y,
+   *     }
+   *   ]
+   * }
+   * </pre>
+   */
+  public static Result restOrgToSubOrgList(String org) {
+    JsonArray dataSets = new JsonArray();
+    String sql = "select distinct(sub_organization) from yarn_app_result where organization = :org";
+    List<SqlRow> subOrgList = Ebean.createSqlQuery(sql)
+            .setParameter("org", org)
+            .findList();
+    for(SqlRow row: subOrgList) {
+      JsonObject jsonObject = new JsonObject();
+      jsonObject.addProperty("subOrg", row.getString("sub_organization"));
+      dataSets.add(jsonObject);
+    }
+    return ok(new Gson().toJson(dataSets));
+  }
+
+  /**
+   * The data for plotting the job analysis graph. While plotting the job analysis
+   * graph an ajax call is made to this to fetch the graph data.
+   *
+   * Data Returned:
+   * <pre>
+   * {@code
+   *   [
+   *     {
+   *       "flowtime": <Last job's finish time>,
+   *       "score": 1000,
+   *       "heuristicInfo": [
+   *         {
+   *           "heuristicName:" "h1",
+   *           "heuristicScore": 500
+   *         },
+   *         {
+   *           "heuristicName:" "h2",
+   *           "heuristicScore": 400
+   *         }
+   *       ]
+   *     },
+   *     {
+   *       "flowtime": <Last job's finish time>,
+   *       "score": 700,
+   *       "heuristicInfo": [
+   *         {
+   *           "heuristicName:" "id",
+   *           "heuristicScore": 0
+   *         },
+   *         {
+   *           "heuristicName:" "id",
+   *           "heuristicScore": 700
+   *         }
+   *       ]
+   *     }
+   *   ]
+   * }
+   * </pre>
+   */
+  public static Result restJobAnalysisGraphData(String jobDefId, String finishedTimeBegin, String finishedTimeEnd) {
+    JsonArray datasets = new JsonArray();
+    if (jobDefId == null || jobDefId.isEmpty()) {
+      return ok(new Gson().toJson(datasets));
+    }
+
+    int jobScore;
+    String sql = "select distinct job_exec_id from yarn_app_result where job_def_id = :job_def_id and finish_time>= :finished_time_begin and finish_time<= :finished_time_end ";
+    List<SqlRow> jobExecIdList = Ebean.createSqlQuery(sql)
+            .setParameter("job_def_id", jobDefId)
+            .setParameter("finished_time_begin", Utils.isSet(finishedTimeBegin) ? Long.parseLong(finishedTimeBegin) : Long.MIN_VALUE)
+            .setParameter("finished_time_end", Utils.isSet(finishedTimeEnd) ? Long.parseLong(finishedTimeEnd) : Long.MAX_VALUE)
+            .findList();
+    Iterator<SqlRow> jobExecIdListIterator = jobExecIdList.iterator();
+
+    while(jobExecIdListIterator.hasNext()) {
+
+      String jobExecId = jobExecIdListIterator.next().getString("job_exec_id");
+      AppResult appResult = AppResult.find.select("*")
+              .where()
+              .eq(AppResult.TABLE.JOB_DEF_ID, jobDefId)
+              .eq(AppResult.TABLE.JOB_EXEC_ID, jobExecId)
+              .order()
+              .desc(AppResult.TABLE.FINISH_TIME)
+              .setMaxRows(1)
+              .findUnique();
+
+      sql = "select b.heuristic_name, sum(b.score) as heuristic_score from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id  where a.job_def_id = :job_def_id and a.job_exec_id = :job_exec_id group by b.heuristic_name";
+      List<SqlRow> heuristicsInfoList = Ebean.createSqlQuery(sql)
+              .setParameter("job_def_id", jobDefId)
+              .setParameter("job_exec_id", jobExecId)
+              .findList();
+      Iterator<SqlRow> heuristicsInfoListIterator = heuristicsInfoList.iterator();
+
+      jobScore = 0;
+      JsonArray heuristicsInfoJsonArray = new JsonArray();
+      while(heuristicsInfoListIterator.hasNext()) {
+
+        SqlRow heuristicsInfoRow = heuristicsInfoListIterator.next();
+        JsonObject heuristicInfo = new JsonObject();
+        heuristicInfo.addProperty("heuristicName", heuristicsInfoRow.getString("heuristic_name"));
+        heuristicInfo.addProperty("heuristicScore", heuristicsInfoRow.getInteger("heuristic_score"));
+        jobScore = jobScore + heuristicsInfoRow.getInteger("heuristic_score");
+        heuristicsInfoJsonArray.add(heuristicInfo);
+      }
+
+      JsonObject dataSet = new JsonObject();
+      dataSet.addProperty("flowtime", Utils.getFlowTime(appResult));
+      dataSet.addProperty("score", jobScore);
+      dataSet.add("heuristicInfo", heuristicsInfoJsonArray);
+      datasets.add(dataSet);
+    }
+
+    JsonArray sortedDataSets = Utils.sortJsonArray(datasets);
+    return ok(new Gson().toJson(sortedDataSets));
   }
 
   /**
