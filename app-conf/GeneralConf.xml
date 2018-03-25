@@ -42,14 +42,6 @@
     <value>com.linkedin.drelephant.executors.QuartzExecutorService</value>
     <description>Executor service (can be one of ThreadPoolExecutorService or QuartzExecutorService)</description>
   </property>
-  <property>
-    <name>drelephant.notification.service.class.name</name>
-    <value>com.linkedin.drelephant.notifications.MailService</value>
-  </property>
-  <property>
-    <name>drelephant.notification.template.class.name</name>
-    <value>com.linkedin.drelephant.templates.NotificationTemplate1</value>
-  </property>
   <!--
   Initial window in MS to indicate how much older apps to fetch from RM.
   -->
