@@ -27,7 +27,7 @@ import java.util.Properties;
 /**
  * This class provides methods to load information specific to the Oozie scheduler.
  */
-public class OozieScheduler implements Scheduler {
+public class OozieScheduler extends Scheduler {
 
     private static final Logger logger = Logger.getLogger(OozieScheduler.class);
 
@@ -65,6 +65,7 @@ public class OozieScheduler implements Scheduler {
     }
 
     public OozieScheduler(String appId, Properties properties, SchedulerConfigurationData schedulerConfData, OozieClient oozieClient) {
+        super(properties);
         schedulerName = schedulerConfData.getSchedulerName();
 
         if (properties != null && properties.getProperty(OOZIE_ACTION_ID) != null) {
@@ -250,16 +251,6 @@ public class OozieScheduler implements Scheduler {
     @Override
     public String getFlowExecUrl() {
         return getUrl(flowExecIdUrl, flowExecId, workflowExecUrlTemplate, OOZIE_WORKFLOW_EXEC_URL_TEMPLATE);
-    }
-
-    @Override
-    public String getOrganization() {
-        return null;
-    }
-
-    @Override
-    public String getSubOrganization() {
-        return null;
     }
 
     @Override

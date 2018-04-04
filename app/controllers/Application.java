@@ -26,10 +26,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.linkedin.drelephant.ElephantContext;
-import com.linkedin.drelephant.analysis.HeuristicDetails;
-import com.linkedin.drelephant.analysis.JobDetails;
-import com.linkedin.drelephant.analysis.Metrics;
-import com.linkedin.drelephant.analysis.Severity;
+import com.linkedin.drelephant.analysis.*;
 import com.linkedin.drelephant.util.Utils;
 import models.AppHeuristicResult;
 import models.AppResult;
@@ -677,6 +674,7 @@ public class Application extends Controller {
               jobAnalysisResults.render(null, null, null, null)));
     }
 
+    //Query to get details of heuristics under the corresponding job
     String sql = "select table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score, avg(critical_severity) as critical_severity, avg(severe_severity) as severe_severity, avg(moderate_severity) as moderate_severity from\n" +
             "(select a.job_def_id, a.job_exec_id, b.heuristic_name, sum(b.score) as heuristic_score, sum(CASE WHEN b.severity = 4 then 1 ELSE 0 END) as critical_severity, sum(CASE WHEN b.severity = 3 then 1 ELSE 0 END) as severe_severity, sum(CASE WHEN b.severity = 2 then 1 ELSE 0 END) as moderate_severity from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where a.job_def_id = :job_def_id and a.finish_time>= :finished_time_begin and a.finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name) as table1 \n" +
             "group by table1.job_def_id, table1.heuristic_name having heuristic_score>0";
@@ -690,13 +688,10 @@ public class Application extends Controller {
     long maxScore = 0, minScore =0;
     ArrayList<HeuristicDetails> heuristicDetailsList= new ArrayList<HeuristicDetails>();
     for (SqlRow row : list) {
-      HeuristicDetails heuristicDetails = new HeuristicDetails();
-      heuristicDetails.setHeuristicName(row.getString("heuristic_name"));
-      heuristicDetails.setScore(row.getLong("heuristic_score"));
-      heuristicDetails.setCriticalSeverity(row.getInteger("critical_severity"));
-      heuristicDetails.setSevereSeverity(row.getInteger("severe_severity"));
-      heuristicDetails.setModerateSeverity(row.getInteger("moderate_severity"));
+      HeuristicDetails heuristicDetails = new HeuristicDetails(row.getString("heuristic_name"), row.getLong("heuristic_score"),
+              row.getInteger("critical_severity"), row.getInteger("severe_severity"), row.getInteger("moderate_severity"));
 
+      //getting max and min heuristic score
       maxScore = max(maxScore, heuristicDetails.getScore());
       minScore = min(minScore, heuristicDetails.getScore());
 
@@ -705,27 +700,31 @@ public class Application extends Controller {
 
     Iterator<HeuristicDetails> heuristicDetailsListIterator = heuristicDetailsList.iterator();
 
+    List<JobAnalysis> jobAnalysisList = new LinkedList<JobAnalysis>();
     HeuristicDetails heuristicDetails;
     long normalizedScore;
     int criticalHeuristics = 0,  severeHeuristics = 0;
     while(heuristicDetailsListIterator.hasNext()) {
+      JobAnalysis jobAnalysis;
       heuristicDetails = heuristicDetailsListIterator.next();
+      //getting the normalized value of heuristic score and setting heuristic severity as per calculated normalized heuristic score
       normalizedScore =  normalize(heuristicDetails.getScore(), maxScore, minScore);
       if(normalizedScore == 4) {
-        heuristicDetails.setSeverity(Severity.CRITICAL);
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.CRITICAL);
         criticalHeuristics = criticalHeuristics + 1;
       } else if(normalizedScore == 3) {
-        heuristicDetails.setSeverity(Severity.SEVERE);
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.SEVERE);
         severeHeuristics = severeHeuristics + 1;
       } else if(normalizedScore == 2) {
-        heuristicDetails.setSeverity(Severity.MODERATE);
-      } else if(normalizedScore == 1) {
-        heuristicDetails.setSeverity(Severity.LOW);
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.MODERATE);
+      } else {
+        jobAnalysis = new JobAnalysis(heuristicDetails, Severity.LOW);
       }
+      jobAnalysisList.add(jobAnalysis);
     }
 
     return ok(jobAnalysisPage.render(jobDefId, finishedTimeBegin, finishedTimeEnd,
-            jobAnalysisResults.render(heuristicDetailsList, heuristicDetailsList.size(), criticalHeuristics, severeHeuristics)));
+            jobAnalysisResults.render(jobAnalysisList, jobAnalysisList.size(), criticalHeuristics, severeHeuristics)));
   }
 
   /**
@@ -750,6 +749,7 @@ public class Application extends Controller {
               orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, null, null, null)));
     }
 
+    //Query to get details of jobs under the corresponding org and sub-org
     String sql = "select table8.job_runs, table8.job_def_id, table8.organization, table8.sub_organization, table8.job_type, table8.scheduler, table8.username, table8.job_name, table8.job_runs, table8.queue_name, table8.score, table8.resource_used, table8.resource_wasted, table8.total_delay, table9.heuristic_name from\n" +
             "(select count(a.job_def_id) as job_runs, a.job_def_id, a.organization, a.sub_organization, a.job_type, a.scheduler, a.username, a.job_name, a.queue_name, avg(a.score) as score, avg(a.resource_used) as resource_used, avg(a.resource_wasted) as resource_wasted, avg(a.total_delay) as total_delay from ( select job_def_id, organization, sub_organization, job_type, queue_name, scheduler, username, job_name, sum(score) as score, sum(resource_used) as resource_used, sum(resource_wasted) as resource_wasted, sum(total_delay) as total_delay from yarn_app_result where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by job_def_id, job_exec_id ) as a group by job_def_id having score > 0) as table8\n" +
             "join\n" +
@@ -784,44 +784,41 @@ public class Application extends Controller {
     long maxScore = 0, minScore = 0;
     List<JobDetails> jobDetailsList = new LinkedList<JobDetails>();
     for (SqlRow row : list) {
-      JobDetails jobDetails = new JobDetails();
-      jobDetails.setJobDefId(row.getString("job_def_id"));
-      jobDetails.setJobName(row.getString("job_name"));
-      jobDetails.setJobType(row.getString("job_type"));
-      jobDetails.setUserName(row.getString("username"));
-      jobDetails.setQueueName(row.getString("queue_name"));
-      jobDetails.setScheduler(row.getString("scheduler"));
-      jobDetails.setWorstHeuristic(row.getString("heuristic_name"));
-      jobDetails.setJobRuns(row.getInteger("job_runs"));
-      jobDetails.setScore(row.getLong("score"));
-      jobDetails.setResourceUsed(row.getLong("resource_used"));
-      jobDetails.setResourceWasted(row.getLong("resource_wasted"));
-      jobDetails.setTotalDelay(row.getLong("total_delay"));
+      JobDetails jobDetails = new JobDetails(row.getString("job_def_id"), row.getString("job_name"),
+              row.getString("job_type"), row.getString("username"), row.getString("queue_name"),
+              row.getString("scheduler"), row.getString("heuristic_name"), row.getLong("score"),
+              row.getInteger("job_runs"), row.getLong("resource_used"), row.getLong("resource_wasted"),
+              row.getLong("total_delay"));
 
+      //getting max and min job score
       maxScore = max(maxScore, jobDetails.getScore());
       minScore = min(minScore, jobDetails.getScore());
 
       jobDetailsList.add(jobDetails);
     }
 
+    List<OrgAnalysis> orgAnalysisList = new LinkedList<OrgAnalysis>();
     long normalizedScore, criticalJobs = 0, severeJobs = 0;
     for(JobDetails jobDetails: jobDetailsList) {
+      OrgAnalysis orgAnalysis;
+      //getting the normalized value of job score and setting job severity as per calculated normalized job score
       normalizedScore =  normalize(jobDetails.getScore(), maxScore, minScore);
       if(normalizedScore == 4) {
-        jobDetails.setSeverity(Severity.CRITICAL);
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.CRITICAL);
         criticalJobs = criticalJobs + 1;
       } else if(normalizedScore == 3) {
-        jobDetails.setSeverity(Severity.SEVERE);
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.SEVERE);
         severeJobs = severeJobs + 1;
       } else if(normalizedScore == 2) {
-        jobDetails.setSeverity(Severity.MODERATE);
-      } else if(normalizedScore == 1) {
-        jobDetails.setSeverity(Severity.LOW);
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.MODERATE);
+      } else {
+        orgAnalysis = new OrgAnalysis(jobDetails, Severity.LOW);
       }
+      orgAnalysisList.add(orgAnalysis);
     }
 
     return ok(orgAnalysisPage.render(org, subOrg, finishedTimeBegin, finishedTimeEnd,
-            orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, jobDetailsList, criticalJobs, severeJobs)));
+            orgAnalysisResults.render(org, subOrg, finishedTimeBegin, finishedTimeEnd, orgAnalysisList, criticalJobs, severeJobs)));
   }
 
 

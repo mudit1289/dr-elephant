@@ -18,31 +18,10 @@ package com.linkedin.drelephant.tez.fetchers;
 
 import com.linkedin.drelephant.analysis.AnalyticJob;
 import com.linkedin.drelephant.analysis.AnalyticJobGeneratorHadoop2;
-import com.linkedin.drelephant.tez.data.TezCounterData;
-import com.linkedin.drelephant.tez.data.TezDAGApplicationData;
-import com.linkedin.drelephant.tez.data.TezDAGData;
-import com.linkedin.drelephant.tez.data.TezVertexData;
-import com.linkedin.drelephant.tez.data.TezVertexTaskData;
-import com.linkedin.drelephant.math.Statistics;
 import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
+import com.linkedin.drelephant.math.Statistics;
+import com.linkedin.drelephant.tez.data.*;
 import com.linkedin.drelephant.util.Utils;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Properties;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
@@ -50,12 +29,25 @@ import org.apache.log4j.Logger;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 
 /**
  * This class implements the Fetcher for Tez Applications on Hadoop2
  */
 public class TezDataFetcherHadoop2 extends TezDataFetcher {
   private static final Logger logger = Logger.getLogger(TezDataFetcherHadoop2.class);
+
+  private static final String HADOOP_CONF = "HadoopConf.xml";
 
   private URLFactory _urlFactory;
   private JSONFactory _jsonFactory;
@@ -74,12 +66,15 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   public TezDataFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
-    AnalyticJobGeneratorHadoop2 analyticJobGeneratorHadoop2 = new AnalyticJobGeneratorHadoop2();
-    analyticJobGeneratorHadoop2.configure(new Configuration());
+    Configuration configuration = new Configuration();
+    configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
 
+    AnalyticJobGeneratorHadoop2 analyticJobGeneratorHadoop2 = new AnalyticJobGeneratorHadoop2();
+    analyticJobGeneratorHadoop2.configure(configuration);
     final String resourcemanager = analyticJobGeneratorHadoop2.getResourceManagerAddress();
-    final String timelineaddress = new Configuration().get("yarn.timeline-service.webapp.address");
-    final String jhistoryAddr = new Configuration().get("mapreduce.jobhistory.webapp.address");
+
+    final String jhistoryAddr = configuration.get("mapreduce.jobhistory.webapp.address");
+    final String timelineaddress = configuration.get("yarn.timeline-service.webapp.address");
 
     logger.info("Connecting to the job history server at " + timelineaddress + "...");
     _urlFactory = new URLFactory(timelineaddress);

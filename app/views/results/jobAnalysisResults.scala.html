@@ -14,7 +14,7 @@
 * the License.
 *@
 
-@(result: java.util.ArrayList[com.linkedin.drelephant.analysis.HeuristicDetails], totalHeuristics: Integer, criticalHeuristics: Integer, severeHeuristics: Integer)
+@(result: java.util.List[com.linkedin.drelephant.analysis.JobAnalysis], totalHeuristics: Integer, criticalHeuristics: Integer, severeHeuristics: Integer)
 
 @if(result != null && result.nonEmpty) {
 @tags.panel(){ Job Analysis } {
@@ -65,14 +65,14 @@
             </tfoot>
 
             <tbody>
-                @for(heuristicDetails <- result) {
+                @for(jobAnalysis <- result) {
                     <tr>
-                        <td style="min-width:200px; text-align: center;"><span class="label label-@heuristicDetails.getSeverity().getBootstrapColor()">@heuristicDetails.getHeuristicName()</span>@if(heuristicDetails.getSeverity().getValue > 1){ <a href="@routes.Application.oldHelp()?topic=@helper.urlEncode(heuristicDetails.getHeuristicName())">[Explain]</a> }</td>
-                        <td style="min-width:150px; text-align: center;">@heuristicDetails.getSeverity().getText</td>
-                        <td style="min-width:150px; text-align: center;">@heuristicDetails.getScore()</td>
-                        <td style="min-width:150px; text-align: center;">@heuristicDetails.getCriticalSeverity()</td>
-                        <td style="min-width:150px; text-align: center;">@heuristicDetails.getSevereSeverity()</td>
-                        <td style="min-width:200px; text-align: center;">@heuristicDetails.getModerateSeverity()</td>
+                        <td style="min-width:200px; text-align: center;"><span class="label label-@jobAnalysis.getSeverity().getBootstrapColor()">@jobAnalysis.getHeuristicDetails().getHeuristicName()</span>@if(jobAnalysis.getSeverity().getValue > 1){ <a href="@routes.Application.oldHelp()?topic=@helper.urlEncode(jobAnalysis.getHeuristicDetails().getHeuristicName())">[Explain]</a> }</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getSeverity().getText</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getHeuristicDetails().getScore()</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getHeuristicDetails().getCriticalSeverity()</td>
+                        <td style="min-width:150px; text-align: center;">@jobAnalysis.getHeuristicDetails().getSevereSeverity()</td>
+                        <td style="min-width:200px; text-align: center;">@jobAnalysis.getHeuristicDetails().getModerateSeverity()</td>
                     </tr>
                 }
             </tbody>

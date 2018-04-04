@@ -14,11 +14,11 @@
 * the License.
 *@
 
-@(org: String, subOrg: String, finishedTimeBegin: Long, finishedTimeEnd: Long, jobDetailsList: java.util.List[com.linkedin.drelephant.analysis.JobDetails], criticalJobs: Long, severeJobs: Long)
+@(org: String, subOrg: String, finishedTimeBegin: Long, finishedTimeEnd: Long, orgAnalysisList: java.util.List[com.linkedin.drelephant.analysis.OrgAnalysis], criticalJobs: Long, severeJobs: Long)
 
 @import com.linkedin.drelephant.util.Utils;
 
-@if(jobDetailsList != null && jobDetailsList.nonEmpty) {
+@if(orgAnalysisList != null && orgAnalysisList.nonEmpty) {
 @tags.panel(){ Org : <b>@org</b>} {
 <script src="@routes.Assets.at("assets/data-tables/js/jquery.dataTables.utility.js")" type="text/javascript"></script>
 <script src="@routes.Assets.at("assets/data-tables/js/jquery-1.12.4.js")" type="text/javascript"></script>
@@ -30,7 +30,7 @@
     <div class="jumbotron" style="background-color: #ffffff;border-style: inset;padding-bottom:0px;">
         <div class="jumbotron" style="border-style: outset;padding-bottom:0px;padding-left:10px; padding-top:10px;margin-bottom:30px;">
         <p>Sub Org : <b>@subOrg</b><br><br>
-           Analyzed all jobs and about <b>@jobDetailsList.size()</b> jobs need to be checked.<br>
+           Analyzed all jobs and about <b>@orgAnalysisList.size()</b> jobs need to be checked.<br>
            @if(severeJobs > 0) {About <b>@severeJobs</b> of them could use some tuning.<br>}
            @if(criticalJobs > 0) {About <b>@criticalJobs</b> of them need some serious attention!}
         </p>
@@ -75,21 +75,21 @@
             </tfoot>
 
             <tbody>
-                @for(jobDetails <- jobDetailsList) {
+                @for(orgAnalysis <- orgAnalysisList) {
                     <tr>
-                        <td class="hasTooltip" style="min-width:150px; text-align: center;"><a href="/jobanalysis?job-analysis-job-def-id=@jobDetails.getJobDefId()&finished-time-begin=@finishedTimeBegin&finished-time-end=@finishedTimeEnd" class="label label-@jobDetails.getSeverity().getBootstrapColor()">@jobDetails.getJobDefId()<div id="tooltip-div"><span> Click to view details of job @jobDetails.getJobDefId()</span></div></a></td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getSeverity().getText</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getScore()</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getJobType()</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getUserName()</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getQueueName()</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getScheduler()</td>
-                        <td style="min-width:600px; text-align: center;">@jobDetails.getJobName()</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getJobRuns()</td>
-                        <td style="min-width:150px; text-align: center;">@jobDetails.getWorstHeuristic()</td>
-                        <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(jobDetails.getResourceUsed()).split("GB")(0))</td>
-                        <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(jobDetails.getResourceWasted()).split("GB")(0))</td>
-                        <td style="min-width:200px; text-align: center;">@(Utils.getDurationBreakdown(jobDetails.getTotalDelay()).split("Hours")(0))</td>
+                        <td class="hasTooltip" style="min-width:150px; text-align: center;"><a href="/jobanalysis?job-analysis-job-def-id=@orgAnalysis.getJobDetails().getJobDefId()&finished-time-begin=@finishedTimeBegin&finished-time-end=@finishedTimeEnd" class="label label-@orgAnalysis.getSeverity().getBootstrapColor()">@orgAnalysis.getJobDetails().getJobDefId()<div id="tooltip-div"><span> Click to view details of job @orgAnalysis.getJobDetails().getJobDefId()</span></div></a></td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getSeverity().getText</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getScore()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getJobType()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getUserName()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getQueueName()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getScheduler()</td>
+                        <td style="min-width:600px; text-align: center;">@orgAnalysis.getJobDetails().getJobName()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getJobRuns()</td>
+                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getWorstHeuristic()</td>
+                        <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(orgAnalysis.getJobDetails().getResourceUsed()).split("GB")(0))</td>
+                        <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(orgAnalysis.getJobDetails().getResourceWasted()).split("GB")(0))</td>
+                        <td style="min-width:200px; text-align: center;">@(Utils.getDurationBreakdown(orgAnalysis.getJobDetails().getTotalDelay()).split("Hours")(0))</td>
                     </tr>
                 }
             </tbody>

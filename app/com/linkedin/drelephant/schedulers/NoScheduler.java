@@ -25,7 +25,7 @@ import org.apache.log4j.Logger;
  * This class provides methods to load information about workflow when you don't have scheduler.
  * We use the paragdim one job is one flow 
  */
-public class NoScheduler implements Scheduler {
+public class NoScheduler extends Scheduler {
 
   private static final Logger logger = Logger.getLogger(NoScheduler.class);
 
@@ -45,6 +45,7 @@ public class NoScheduler implements Scheduler {
 
 
   public NoScheduler(String appId, Properties properties, SchedulerConfigurationData schedulerConfData) {
+    super(properties);
     schedulerName = schedulerConfData.getSchedulerName();
     if (properties != null) {
       loadInfo(appId, properties);
@@ -115,16 +116,6 @@ public class NoScheduler implements Scheduler {
   @Override
   public String getFlowExecUrl() {
     return flowExecUrl;
-  }
-
-  @Override
-  public String getOrganization() {
-    return null;
-  }
-
-  @Override
-  public String getSubOrganization() {
-    return null;
   }
 
   @Override

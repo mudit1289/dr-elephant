@@ -24,7 +24,7 @@ import org.apache.log4j.Logger;
 /**
  * This class provides methods to load information specific to the Azkaban scheduler.
  */
-public class AzkabanScheduler implements Scheduler {
+public class AzkabanScheduler extends Scheduler {
 
   private static final Logger logger = Logger.getLogger(AzkabanScheduler.class);
 
@@ -52,6 +52,7 @@ public class AzkabanScheduler implements Scheduler {
 
 
   public AzkabanScheduler(String appId, Properties properties, SchedulerConfigurationData schedulerConfData) {
+    super(properties);
     schedulerName = schedulerConfData.getSchedulerName();
     if (properties != null) {
       loadInfo(appId, properties);
@@ -75,8 +76,6 @@ public class AzkabanScheduler implements Scheduler {
 
     workflowDepth = 0; // TODO: Add sub-workflow support
     jobName = properties.getProperty(AZKABAN_JOB_NAME);
-    organization = properties.getProperty("job.billing.org");
-    subOrganization = properties.getProperty("job.org") + "." + properties.getProperty("job.namespace");
   }
 
   @Override
@@ -132,16 +131,6 @@ public class AzkabanScheduler implements Scheduler {
   @Override
   public int getWorkflowDepth() {
     return workflowDepth;
-  }
-
-  @Override
-  public String getOrganization() {
-    return organization;
-  }
-
-  @Override
-  public String getSubOrganization() {
-    return subOrganization;
   }
 
   @Override
