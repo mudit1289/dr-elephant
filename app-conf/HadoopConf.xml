@@ -24,23 +24,23 @@
     </property>
     <property>
         <name>mapreduce.jobhistory.webapp.address</name>
-        <value>prod-fdphadoop-bheema-hs-0001:19888</value>
+        <value>gamma-bheema-hs-0001:19888</value>
     </property>
     <property>
         <name>yarn.resourcemanager.webapp.address</name>
-        <value>prod-fdphadoop-bheema-rm-0001:8088</value>
+        <value>gamma-bheema-rm-0001:8088</value>
     </property>
     <property>
         <name>yarn.resourcemanager.webapp.address.rm1</name>
-        <value>prod-fdphadoop-bheema-rm-0001:8088</value>
+        <value>gamma-bheema-rm-0001:8088</value>
     </property>
     <property>
         <name>yarn.resourcemanager.webapp.address.rm2</name>
-        <value>prod-fdphadoop-bheema-rm-0002:8088</value>
+        <value>gamma-bheema-rm-0002:8088</value>
     </property>
     <property>
         <name>yarn.timeline-service.webapp.address</name>
-        <value>prod-fdphadoop-bheema-hs-0001:8188</value>
+        <value>gamma-bheema-hs-0001:8188</value>
     </property>
     <property>
         <name>yarn.resourcemanager.ha.enabled</name>
