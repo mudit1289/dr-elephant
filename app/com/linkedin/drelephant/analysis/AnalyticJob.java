@@ -17,7 +17,6 @@
 package com.linkedin.drelephant.analysis;
 
 import com.linkedin.drelephant.ElephantContext;
-import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.util.InfoExtractor;
 import com.linkedin.drelephant.util.Utils;
 
@@ -361,6 +360,11 @@ public class AnalyticJob implements Serializable {
    * @return true if should retry, else false
    */
   public boolean isPrimaryPhaseRetry() {
-    return (_retries++) < _RETRY_LIMIT;
+    if(_retries < _RETRY_LIMIT) {
+      _retries++;
+      return true;
+    }
+    // Not incrementing _retries if condition fails so as to get correct value of total retries in case of QuartzScheduling.
+    return false;
   }
 }
