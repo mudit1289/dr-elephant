@@ -750,29 +750,40 @@ public class Application extends Controller {
     }
 
     //Query to get details of jobs under the corresponding org and sub-org
-    String sql = "select table8.job_runs, table8.job_def_id, table8.organization, table8.sub_organization, table8.job_type, table8.scheduler, table8.username, table8.job_name, table8.job_runs, table8.queue_name, table8.score, table8.resource_used, table8.resource_wasted, table8.total_delay, table9.heuristic_name from\n" +
-            "(select count(a.job_def_id) as job_runs, a.job_def_id, a.organization, a.sub_organization, a.job_type, a.scheduler, a.username, a.job_name, a.queue_name, avg(a.score) as score, avg(a.resource_used) as resource_used, avg(a.resource_wasted) as resource_wasted, avg(a.total_delay) as total_delay from ( select job_def_id, organization, sub_organization, job_type, queue_name, scheduler, username, job_name, sum(score) as score, sum(resource_used) as resource_used, sum(resource_wasted) as resource_wasted, sum(total_delay) as total_delay from yarn_app_result where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by job_def_id, job_exec_id ) as a group by job_def_id having score > 0) as table8\n" +
-            "join\n" +
-            "(select table2.job_def_id, table2.heuristic_name, table2.heuristic_score from\n" +
-            "(\n" +
-            "select table2.job_def_id, max(table2.heuristic_score) as heuristic_score from\n" +
-            "(\n" +
-            "select table1.job_def_id, table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score from\n" +
-            "(select a.job_def_id, a.job_exec_id,b.heuristic_name,sum(b.score) as heuristic_score from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name\n" +
-            ") as table1 \n" +
-            "group by table1.job_def_id, table1.heuristic_name\n" +
-            ") as table2\n" +
-            "group by table2.job_def_id\n" +
-            ") as table3\n" +
-            "inner join \n" +
-            "(\n" +
-            "select table1.job_def_id, table1.heuristic_name, avg(table1.heuristic_score) as heuristic_score from\n" +
-            "(select a.job_def_id, a.job_exec_id,b.heuristic_name,sum(b.score) as heuristic_score from yarn_app_result as a join yarn_app_heuristic_result as b on a.id = b.yarn_app_result_id where organization = :org and sub_organization = :sub_org and finish_time>= :finished_time_begin and finish_time<= :finished_time_end group by a.job_def_id, a.job_exec_id,b.heuristic_name\n" +
-            ") as table1 \n" +
-            "group by table1.job_def_id, table1.heuristic_name\n" +
-            ") as table2\n" +
-            "on table2.job_def_id = table3.job_def_id and table2.heuristic_score = table3.heuristic_score and table3.heuristic_score != 0) as table9\n" +
-            "on table8.job_def_id = table9.job_def_id";
+    String sql = "SELECT Count(a.job_def_id)    AS job_runs, \n" +
+            "               a.job_def_id, \n" +
+            "               a.organization, \n" +
+            "               a.sub_organization, \n" +
+            "               a.job_type, \n" +
+            "               a.scheduler, \n" +
+            "               a.username, \n" +
+            "               a.job_name, \n" +
+            "               a.queue_name, \n" +
+            "               Avg(a.score)           AS score, \n" +
+            "               Avg(a.resource_used)   AS resource_used, \n" +
+            "               Avg(a.resource_wasted) AS resource_wasted, \n" +
+            "               Avg(a.total_delay)     AS total_delay \n" +
+            "        FROM   (SELECT job_def_id, \n" +
+            "                       organization, \n" +
+            "                       sub_organization, \n" +
+            "                       job_type, \n" +
+            "                       queue_name, \n" +
+            "                       scheduler, \n" +
+            "                       username, \n" +
+            "                       job_name, \n" +
+            "                       Sum(score)           AS score, \n" +
+            "                       Sum(resource_used)   AS resource_used, \n" +
+            "                       Sum(resource_wasted) AS resource_wasted, \n" +
+            "                       Sum(total_delay)     AS total_delay \n" +
+            "                FROM   yarn_app_result \n" +
+            "                WHERE  organization = :org \n" +
+            "                       AND sub_organization = :sub_org \n" +
+            "                       AND finish_time >= :finished_time_begin \n" +
+            "                       AND finish_time <= :finished_time_end \n" +
+            "                GROUP  BY job_def_id, \n" +
+            "                          job_exec_id) AS a \n" +
+            "        GROUP  BY job_def_id \n" +
+            "        HAVING score > 0";
 
     List<SqlRow> list = Ebean.createSqlQuery(sql)
             .setParameter("org", org)
@@ -786,9 +797,8 @@ public class Application extends Controller {
     for (SqlRow row : list) {
       JobDetails jobDetails = new JobDetails(row.getString("job_def_id"), row.getString("job_name"),
               row.getString("job_type"), row.getString("username"), row.getString("queue_name"),
-              row.getString("scheduler"), row.getString("heuristic_name"), row.getLong("score"),
-              row.getInteger("job_runs"), row.getLong("resource_used"), row.getLong("resource_wasted"),
-              row.getLong("total_delay"));
+              row.getString("scheduler"), row.getLong("score"), row.getInteger("job_runs"),
+              row.getLong("resource_used"), row.getLong("resource_wasted"), row.getLong("total_delay"));
 
       //getting max and min job score
       maxScore = max(maxScore, jobDetails.getScore());

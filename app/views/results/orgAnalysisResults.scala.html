@@ -49,7 +49,6 @@
                     <th class="hasTooltip" style="min-width:150px; text-align: center;">SCHEDULER<div id="tooltip-div"><span> Scheduler that triggered the job</span></div></th>
                     <th class="hasTooltip" style="min-width:600px; text-align: center;">JOB NAME<div id="tooltip-div"><span> Name of the job</span></div></th>
                     <th class="hasTooltip" style="min-width:150px; text-align: center;">JOB RUNS<div id="tooltip-div"><span> Total runs of the job</span></div></th>
-                    <th class="hasTooltip" style="min-width:150px; text-align: center;">WORST HEURISTIC<div id="tooltip-div"><span> Worst heuristic</span></div></th>
                     <th class="hasTooltip" style="min-width:200px; text-align: center;">RESOURCES USED<div id="tooltip-div"><span> Average resources used</span></div></th>
                     <th class="hasTooltip" style="min-width:200px; text-align: center;">RESOURCES WASTED<div id="tooltip-div"><span> Average resources wasted</span></div></th>
                     <th class="hasTooltip" style="min-width:200px; text-align: center;">TOTAL DELAY<div id="tooltip-div"><span> Average delay</span></div></th>
@@ -67,7 +66,6 @@
                     <th>SCHEDULER</th>
                     <th>JOB NAME</th>
                     <th>JOB RUNS</th>
-                    <th>WORST HEURISTIC</th>
                     <th>RESOURCES USED</th>
                     <th>RESOURCES WASTED</th>
                     <th>TOTAL DELAY</th>
@@ -86,7 +84,6 @@
                         <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getScheduler()</td>
                         <td style="min-width:600px; text-align: center;">@orgAnalysis.getJobDetails().getJobName()</td>
                         <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getJobRuns()</td>
-                        <td style="min-width:150px; text-align: center;">@orgAnalysis.getJobDetails().getWorstHeuristic()</td>
                         <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(orgAnalysis.getJobDetails().getResourceUsed()).split("GB")(0))</td>
                         <td style="min-width:200px; text-align: center;">@(Utils.getResourceInGBHours(orgAnalysis.getJobDetails().getResourceWasted()).split("GB")(0))</td>
                         <td style="min-width:200px; text-align: center;">@(Utils.getDurationBreakdown(orgAnalysis.getJobDetails().getTotalDelay()).split("Hours")(0))</td>

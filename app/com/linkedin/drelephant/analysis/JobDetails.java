@@ -8,7 +8,6 @@ public class JobDetails {
     private final String userName;
     private final String queueName;
     private final String scheduler;
-    private final String worstHeuristic;
     private final long score;
     private final int JobRuns;
     private final long resourceUsed;
@@ -16,7 +15,7 @@ public class JobDetails {
     private final long totalDelay;
 
     public JobDetails(String jobDefId, String jobName, String jobType, String userName, String queueName,
-                      String scheduler, String worstHeuristic, long score, int jobRuns, long resourceUsed,
+                      String scheduler, long score, int jobRuns, long resourceUsed,
                       long resourceWasted, long totalDelay){
         this.jobDefId = jobDefId;
         this.jobName = jobName;
@@ -24,7 +23,6 @@ public class JobDetails {
         this.userName = userName;
         this.queueName = queueName;
         this.scheduler = scheduler;
-        this.worstHeuristic = worstHeuristic;
         this.score = score;
         this.JobRuns = jobRuns;
         this.resourceUsed = resourceUsed;
@@ -74,9 +72,5 @@ public class JobDetails {
 
     public long getTotalDelay() {
         return totalDelay;
-    }
-
-    public String getWorstHeuristic() {
-        return worstHeuristic;
     }
 }
