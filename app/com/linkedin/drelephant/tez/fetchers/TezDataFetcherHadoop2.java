@@ -36,6 +36,8 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -56,6 +58,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   private String _resourcemanager;
   private String _applicationHistoryAddress;
   private String _dagId;
+  private final ForkJoinPool _executorPool;
   private static final String SUCCEEDED="SUCCEEDED";
   /**
    * Tez Fetcher uses Timeline server data in order to fetch the data. Tez DAG submits data to
@@ -86,6 +89,8 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
     _resourcemanager = String.format("http://%s/cluster/app/", resourcemanager);
     _applicationHistoryAddress = String.format("http://%s/ws/v1/applicationhistory/apps/", timelineaddress);
+
+    _executorPool = new ForkJoinPool(3);
   }
 
   @Override
@@ -113,7 +118,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
    * The analysis is done at the application level and not DAG level.
    */
   @Override
-  public TezDAGApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+  public TezDAGApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
 
     String appId = analyticJob.getAppId();
     String jobId = Utils.getJobIdFromApplicationId(appId);
@@ -176,10 +181,10 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
    * @throws IOException
    * @throws AuthenticationException
    */
-  private int getDagSubmittedCount(URL url,TezDAGApplicationData jobData) throws IOException,AuthenticationException{
+  private int getDagSubmittedCount(URL url,TezDAGApplicationData jobData) throws IOException,AuthenticationException,InterruptedException,ExecutionException{
     List<AnalyticJob> appList = new ArrayList<AnalyticJob>();
 
-    JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+    JsonNode rootNode =  _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
     String diagnosticsInfo = rootNode.path("diagnosticsInfo").getValueAsText();
     Long startedTime = (rootNode.path("startedTime").getLongValue());
     Long finishedTime = (rootNode.path("finishedTime").getLongValue());
@@ -282,36 +287,36 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
   private class JSONFactory {
 
-    private long getStartTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+    private long getStartTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       return rootNode.path("job").path("startTime").getValueAsLong();
     }
 
-    private long getFinishTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+    private long getFinishTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       return rootNode.path("job").path("finishTime").getValueAsLong();
     }
 
-    private long getSubmitTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+    private long getSubmitTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       return rootNode.path("job").path("submitTime").getValueAsLong();
     }
 
-    private String getState(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+    private String getState(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       return rootNode.path("job").path("state").getValueAsText();
     }
 
-    private String getDiagnosticInfo(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+    private String getDiagnosticInfo(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       String diag = rootNode.path("job").path("diagnostics").getValueAsText();
       return diag;
     }
 
-    private Properties getProperties(URL url) throws IOException, AuthenticationException {
+    private Properties getProperties(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
       Properties jobConf = new Properties();
 
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       JsonNode configs = rootNode.path("otherinfo").get("config");
       Iterator<String> it = configs.getFieldNames();
 
@@ -333,10 +338,10 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
 
 
-    private TezCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
+    private TezCounterData getJobCounter(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
       TezCounterData holder = new TezCounterData();
 
-      JsonNode rootNodeTez = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNodeTez = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       JsonNode groupsTez = rootNodeTez.path("otherinfo").path("counters").path("counterGroups");
       for (JsonNode group : groupsTez) {
         for (JsonNode counter : group.path("counters")) {
@@ -352,9 +357,9 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
 
 
 
-    private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException {
+    private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
 
-      JsonNode rootNode = ThreadContextTez.readJsonNode(url);
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(url)).get();
       JsonNode taskAttempt = rootNode.path("taskAttempt");
 
       long startTime = taskAttempt.get("startTime").getLongValue();
@@ -385,14 +390,9 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
      * @throws AuthenticationException
      */
     private void getTaskDataAll(List<TezVertexData> tezVertexList, List<TezVertexTaskData> mapperList,
-                                List<TezVertexTaskData> reducerList,List<TezVertexTaskData> scopeTaskList,URL dagId) throws IOException,AuthenticationException {
+                                List<TezVertexTaskData> reducerList,List<TezVertexTaskData> scopeTaskList,URL dagId) throws IOException,AuthenticationException, InterruptedException, ExecutionException {
       JsonNode rootNode = null;
-      try{
-        rootNode = ThreadContextTez.readJsonNode(dagId);
-      }
-      catch(FileNotFoundException e){
-        return;
-      }
+      rootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode(dagId)).get();
 
       Iterator<JsonNode> vertexNode = rootNode.path("entities").getElements();
 
@@ -440,7 +440,7 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
           }
         }
         tezVertexData.setCounter(holder);
-        Iterator<JsonNode> taskRootNode = ThreadContextTez.readJsonNode( _urlFactory.getTezTaskIdURL(vertexId)).path("entities").getElements();
+        Iterator<JsonNode> taskRootNode = _executorPool.submit(() -> ThreadContextTez.readJsonNode( _urlFactory.getTezTaskIdURL(vertexId))).get().path("entities").getElements();
         while(taskRootNode.hasNext()){
           JsonNode taskNode = taskRootNode.next();
           String taskId=taskNode.get("entity").getValueAsText();

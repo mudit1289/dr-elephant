@@ -2,7 +2,6 @@ package com.linkedin.drelephant.executors;
 
 import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.analysis.AnalyticJob;
-import models.AppResult;
 import org.apache.commons.lang.time.DateUtils;
 import org.apache.log4j.Logger;
 import org.quartz.*;

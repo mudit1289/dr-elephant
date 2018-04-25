@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -54,6 +56,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   // We provide one minute job fetch delay due to the job sending lag from AM/NM to JobHistoryServer HDFS
 
   private static final String HADOOP_CONF = "HadoopConf.xml";
+  private final ForkJoinPool _executorPool;
 
   private URLFactory _urlFactory;
   private JSONFactory _jsonFactory;
@@ -73,6 +76,8 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
 
     _jsonFactory = new JSONFactory();
     _jhistoryWebAddr = "http://" + jhistoryAddr + "/jobhistory/job/";
+
+    _executorPool = new ForkJoinPool(3);
   }
 
   @Override
@@ -95,7 +100,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   }
 
   @Override
-  public MapReduceApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException {
+  public MapReduceApplicationData fetchData(AnalyticJob analyticJob) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
 
     String appId = analyticJob.getAppId();
     String jobId = Utils.getJobIdFromApplicationId(appId);
@@ -162,7 +167,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     return jobData;
   }
 
-  private String parseException(String jobId, String diagnosticInfo) throws MalformedURLException, IOException,
+  private String parseException(String jobId, String diagnosticInfo) throws MalformedURLException, IOException, InterruptedException, ExecutionException,
                                                                             AuthenticationException {
     Matcher m = ThreadContextMR2.getDiagnosticMatcher(diagnosticInfo);
     if (m.matches()) {
@@ -229,36 +234,36 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
 
   private class JSONFactory {
 
-    private long getStartTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+    private long getStartTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode =  _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       return rootNode.path("job").path("startTime").getValueAsLong();
     }
 
-    private long getFinishTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+    private long getFinishTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode =  _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       return rootNode.path("job").path("finishTime").getValueAsLong();
     }
 
-    private long getSubmitTime(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+    private long getSubmitTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException  {
+      JsonNode rootNode =  _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       return rootNode.path("job").path("submitTime").getValueAsLong();
     }
 
-    private String getState(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+    private String getState(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException  {
+      JsonNode rootNode =  _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       return rootNode.path("job").path("state").getValueAsText();
     }
 
-    private String getDiagnosticInfo(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+    private String getDiagnosticInfo(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException  {
+      JsonNode rootNode =  _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       String diag = rootNode.path("job").path("diagnostics").getValueAsText();
       return diag;
     }
 
-    private Properties getProperties(URL url) throws IOException, AuthenticationException {
+    private Properties getProperties(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException  {
       Properties jobConf = new Properties();
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode =  _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       JsonNode configs = rootNode.path("conf").path("property");
 
       for (JsonNode conf : configs) {
@@ -269,10 +274,10 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
       return jobConf;
     }
 
-    private MapReduceCounterData getJobCounter(URL url) throws IOException, AuthenticationException {
+    private MapReduceCounterData getJobCounter(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
       MapReduceCounterData holder = new MapReduceCounterData();
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       JsonNode groups = rootNode.path("jobCounters").path("counterGroup");
 
       for (JsonNode group : groups) {
@@ -286,8 +291,8 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
       return holder;
     }
 
-    private MapReduceCounterData getTaskCounter(URL url) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+    private MapReduceCounterData getTaskCounter(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       JsonNode groups = rootNode.path("jobTaskCounters").path("taskCounterGroup");
       MapReduceCounterData holder = new MapReduceCounterData();
 
@@ -302,9 +307,9 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
       return holder;
     }
 
-    private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException {
+    private long[] getTaskExecTime(URL url) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       JsonNode taskAttempt = rootNode.path("taskAttempt");
 
       long startTime = taskAttempt.get("startTime").getLongValue();
@@ -325,9 +330,9 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
     }
 
     private void getTaskDataAll(URL url, String jobId, List<MapReduceTaskData> mapperList,
-        List<MapReduceTaskData> reducerList) throws IOException, AuthenticationException {
+        List<MapReduceTaskData> reducerList) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
 
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(url);
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextMR2.readJsonNode(url)).get();
       JsonNode tasks = rootNode.path("tasks").path("task");
 
       for (JsonNode task : tasks) {
@@ -356,7 +361,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
       getTaskData(jobId, reducerList);
     }
 
-    private void getTaskData(String jobId, List<MapReduceTaskData> taskList) throws IOException, AuthenticationException {
+    private void getTaskData(String jobId, List<MapReduceTaskData> taskList) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
 
       int sampleSize = sampleAndGetSize(jobId, taskList);
 
@@ -375,7 +380,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
       }
     }
 
-    private String getTaskFailedStackTrace(URL taskAllAttemptsUrl) throws IOException, AuthenticationException {
+    private String getTaskFailedStackTrace(URL taskAllAttemptsUrl) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
       JsonNode firstAttempt = getTaskFirstFailedAttempt(taskAllAttemptsUrl);
       if(firstAttempt != null) {
         String stacktrace = firstAttempt.get("diagnostics").getValueAsText();
@@ -385,8 +390,8 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
       }
     }
 
-    private JsonNode getTaskFirstFailedAttempt(URL taskAllAttemptsUrl) throws IOException, AuthenticationException {
-      JsonNode rootNode = ThreadContextMR2.readJsonNode(taskAllAttemptsUrl);
+    private JsonNode getTaskFirstFailedAttempt(URL taskAllAttemptsUrl) throws IOException, AuthenticationException, InterruptedException, ExecutionException {
+      JsonNode rootNode = _executorPool.submit(() -> ThreadContextMR2.readJsonNode(taskAllAttemptsUrl)).get();
       long firstAttemptFinishTime = Long.MAX_VALUE;
       JsonNode firstAttempt = null;
       JsonNode taskAttempts = rootNode.path("taskAttempts").path("taskAttempt");

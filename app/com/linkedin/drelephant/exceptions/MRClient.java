@@ -27,6 +27,8 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 
 
 /**
@@ -39,8 +41,10 @@ public class MRClient {
   private String jhistoryAddr;
   private AuthenticatedURL.Token _token;
   private AuthenticatedURL _authenticatedURL;
+  private final ForkJoinPool _executorPool;
 
   public MRClient() {
+    _executorPool = new ForkJoinPool(3);
     _token = new AuthenticatedURL.Token();
     _authenticatedURL = new AuthenticatedURL();
     Configuration configuration = new Configuration();
@@ -77,16 +81,16 @@ public class MRClient {
   public String getMRJobLog(String mrJobId) {
     String mrJobHistoryURL = "http://" + jhistoryAddr + "/ws/v1/history/mapreduce/jobs/" + mrJobId;
     try {
-      JsonNode response = fetchJson(new URL(mrJobHistoryURL));
+      JsonNode response = _executorPool.submit(() -> fetchJson(new URL(mrJobHistoryURL))).get();
       if (response.get("job").get("state").toString() != "SUCCEEDED") {
         return response.get("job").get("diagnostics").getTextValue();
       }
-    } catch (MalformedURLException e) {
-      logger.error(String.format("Malformed URL %s in MR Client: %s ", mrJobHistoryURL, e.getMessage()));
     } catch (NullPointerException e) {
       logger.error(String.format("Invalid response %s", e.getMessage()));
-    } catch (IOException e) {
-      logger.error(String.format("IOException in Mr Client: %s", e.getMessage()));
+    } catch (InterruptedException e) {
+      logger.error(String.format("InterruptedException in Mr Client %s", e.getMessage()));
+    } catch (ExecutionException e) {
+      logger.error(String.format("ExecutionException in Mr Client %s", e.getMessage()));
     }
     return null;
   }
