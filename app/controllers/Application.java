@@ -26,6 +26,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.linkedin.drelephant.ElephantContext;
+import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.analysis.*;
 import com.linkedin.drelephant.util.Utils;
 import models.AppHeuristicResult;
@@ -197,7 +198,7 @@ public class Application extends Controller {
     // check for exact match
     schedulerInfoPair = bestSchedulerInfoMatchLikeValue(partialSchedulerInfoId, schedulerInfoIdField);
     // check for suffix match if feature isn't disabled
-    if (schedulerInfoPair == null && ElephantContext.instance().getGeneralConf().getBoolean(SEARCH_MATCHES_PARTIAL_CONF, true)) {
+    if (schedulerInfoPair == null && ElephantRunner.getInstance().getGeneralConf().getBoolean(SEARCH_MATCHES_PARTIAL_CONF, true)) {
       schedulerInfoPair = bestSchedulerInfoMatchLikeValue(String.format("%s%%", partialSchedulerInfoId), schedulerInfoIdField);
     }
     // if we didn't find anything just give a buest guess

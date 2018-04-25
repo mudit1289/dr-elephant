@@ -16,6 +16,7 @@
 
 package com.linkedin.drelephant.exceptions;
 
+import com.linkedin.drelephant.ElephantRunner;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
@@ -34,7 +35,6 @@ import java.net.URL;
  **/
 public class MRClient {
   private static final Logger logger = Logger.getLogger(MRClient.class);
-  private static final String HADOOP_CONF = "HadoopConf.xml";
 
   private String jhistoryAddr;
   private AuthenticatedURL.Token _token;
@@ -43,9 +43,7 @@ public class MRClient {
   public MRClient() {
     _token = new AuthenticatedURL.Token();
     _authenticatedURL = new AuthenticatedURL();
-    Configuration configuration = new Configuration();
-    configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
-    jhistoryAddr = configuration.get("mapreduce.jobhistory.webapp.address");
+    jhistoryAddr = ElephantRunner.getInstance().getHadoopConf().get("mapreduce.jobhistory.webapp.address");
   }
 
   /**

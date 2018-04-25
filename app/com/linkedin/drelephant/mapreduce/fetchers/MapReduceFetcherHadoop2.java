@@ -16,6 +16,7 @@
 
 package com.linkedin.drelephant.mapreduce.fetchers;
 
+import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.analysis.AnalyticJob;
 import com.linkedin.drelephant.mapreduce.data.MapReduceApplicationData;
 import com.linkedin.drelephant.mapreduce.data.MapReduceCounterData;
@@ -53,8 +54,6 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   private static final Logger logger = Logger.getLogger(MapReduceFetcherHadoop2.class);
   // We provide one minute job fetch delay due to the job sending lag from AM/NM to JobHistoryServer HDFS
 
-  private static final String HADOOP_CONF = "HadoopConf.xml";
-
   private URLFactory _urlFactory;
   private JSONFactory _jsonFactory;
   private String _jhistoryWebAddr;
@@ -62,9 +61,7 @@ public class MapReduceFetcherHadoop2 extends MapReduceFetcher {
   public MapReduceFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
-    Configuration configuration = new Configuration();
-    configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
-    final String jhistoryAddr = configuration.get("mapreduce.jobhistory.webapp.address");
+    final String jhistoryAddr = ElephantRunner.getInstance().getHadoopConf().get("mapreduce.jobhistory.webapp.address");
 
 
     logger.info("Connecting to the job history server at " + jhistoryAddr + "...");

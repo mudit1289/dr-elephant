@@ -16,6 +16,8 @@
 
 package com.linkedin.drelephant.tez.fetchers;
 
+import com.linkedin.drelephant.ElephantContext;
+import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.analysis.AnalyticJob;
 import com.linkedin.drelephant.analysis.AnalyticJobGeneratorHadoop2;
 import com.linkedin.drelephant.configurations.fetcher.FetcherConfigurationData;
@@ -66,15 +68,12 @@ public class TezDataFetcherHadoop2 extends TezDataFetcher {
   public TezDataFetcherHadoop2(FetcherConfigurationData fetcherConfData) throws IOException {
     super(fetcherConfData);
 
-    Configuration configuration = new Configuration();
-    configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
-
     AnalyticJobGeneratorHadoop2 analyticJobGeneratorHadoop2 = new AnalyticJobGeneratorHadoop2();
-    analyticJobGeneratorHadoop2.configure(configuration);
+    analyticJobGeneratorHadoop2.configure(ElephantRunner.getInstance().getGeneralConf());
     final String resourcemanager = analyticJobGeneratorHadoop2.getResourceManagerAddress();
 
-    final String jhistoryAddr = configuration.get("mapreduce.jobhistory.webapp.address");
-    final String timelineaddress = configuration.get("yarn.timeline-service.webapp.address");
+    final String jhistoryAddr = ElephantRunner.getInstance().getHadoopConf().get("mapreduce.jobhistory.webapp.address");
+    final String timelineaddress = ElephantRunner.getInstance().getHadoopConf().get("yarn.timeline-service.webapp.address");
 
     logger.info("Connecting to the job history server at " + timelineaddress + "...");
     _urlFactory = new URLFactory(timelineaddress);

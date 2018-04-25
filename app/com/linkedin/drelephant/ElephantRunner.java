@@ -44,12 +44,15 @@ public class ElephantRunner implements Runnable {
   private static final String RETRY_INTERVAL_KEY = "drelephant.analysis.retry.interval";
   private static final String EXECUTOR_SERVICE = "drelephant.executor.service.class.name";
   private static final String HADOOP_CONF = "HadoopConf.xml";
+  private static final String GENERAL_CONF = "GeneralConf.xml";
 
   private long _fetchInterval;
   private long _retryInterval;
   private HadoopSecurity _hadoopSecurity;
   private AnalyticJobGenerator _analyticJobGenerator;
   private IExecutorService _executorService;
+  private Configuration _hadoopConf;
+  private Configuration _generalConf;
 
   private static ElephantRunner _elephantRunner;
 
@@ -83,11 +86,39 @@ public class ElephantRunner implements Runnable {
     return _executorService;
   }
 
-  private void loadGeneralConfiguration() {
-    Configuration configuration = ElephantContext.instance().getGeneralConf();
+  /**
+   * Get the hadoop configuration object.
+   *
+   * @return the hadoop configuration object.
+   */
+  public Configuration getHadoopConf() {
+    return _hadoopConf;
+  }
 
-    _fetchInterval = Utils.getNonNegativeLong(configuration, FETCH_INTERVAL_KEY, FETCH_INTERVAL);
-    _retryInterval = Utils.getNonNegativeLong(configuration, RETRY_INTERVAL_KEY, RETRY_INTERVAL);
+  /**
+   * Get the general configuration object.
+   *
+   * @return the general configuration object.
+   */
+  public Configuration getGeneralConf() {
+    return _generalConf;
+  }
+
+  private void loadGeneralConfiguration() {
+    logger.info("Loading configuration file " + GENERAL_CONF);
+
+    _generalConf = new Configuration();
+    _generalConf.addResource(this.getClass().getClassLoader().getResourceAsStream(GENERAL_CONF));
+
+    _fetchInterval = Utils.getNonNegativeLong(_generalConf, FETCH_INTERVAL_KEY, FETCH_INTERVAL);
+    _retryInterval = Utils.getNonNegativeLong(_generalConf, RETRY_INTERVAL_KEY, RETRY_INTERVAL);
+  }
+
+  private void loadHadoopConfiguation() {
+    logger.info("Loading configuration file " + HADOOP_CONF);
+
+    _hadoopConf = new Configuration();
+    _hadoopConf.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
   }
 
   private void loadAnalyticJobGenerator() {
@@ -98,9 +129,7 @@ public class ElephantRunner implements Runnable {
     }
 
     try {
-      Configuration configuration = new Configuration();
-      configuration.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
-      _analyticJobGenerator.configure(configuration);
+      _analyticJobGenerator.configure(getGeneralConf());
     } catch (Exception e) {
       logger.error("Error occurred when configuring the analysis provider.", e);
       throw new RuntimeException(e);
@@ -109,7 +138,7 @@ public class ElephantRunner implements Runnable {
 
   private void loadExecutorService() {
 
-    Configuration configuration = ElephantContext.instance().getGeneralConf();
+    Configuration configuration = getGeneralConf();
     String service = configuration.get(EXECUTOR_SERVICE);
     try {
       _executorService = (IExecutorService) Class.forName(service).newInstance();
@@ -127,6 +156,7 @@ public class ElephantRunner implements Runnable {
         @Override
         public Void run() {
           HDFSContext.load();
+          loadHadoopConfiguation();
           loadGeneralConfiguration();
           loadAnalyticJobGenerator();
           loadExecutorService();

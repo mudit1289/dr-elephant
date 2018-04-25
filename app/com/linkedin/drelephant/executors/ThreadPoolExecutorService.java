@@ -1,7 +1,6 @@
 package com.linkedin.drelephant.executors;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.linkedin.drelephant.ElephantContext;
 import com.linkedin.drelephant.ElephantRunner;
 import com.linkedin.drelephant.analysis.AnalyticJob;
 import com.linkedin.drelephant.util.Utils;
@@ -25,7 +24,7 @@ public class ThreadPoolExecutorService extends ThreadPoolExecutor implements IEx
 
     private static final Logger logger = Logger.getLogger(ThreadPoolExecutorService.class);
 
-    private static final Configuration configuration = ElephantContext.instance().getGeneralConf();
+    private static final Configuration configuration = ElephantRunner.getInstance().getGeneralConf();
     private static final int EXECUTOR_NUM = 5;                // The number of executor threads to analyse the jobs
     private static final String EXECUTOR_NUM_KEY = "drelephant.analysis.thread.count";
 

@@ -49,8 +49,6 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   private static final String RM_NODE_STATE_URL = "http://%s/ws/v1/cluster/info";
   private static final String FETCH_INITIAL_WINDOW_MS = "drelephant.analysis.fetch.initial.windowMillis";
 
-  private static Configuration configuration;
-
   // We provide one minute job fetch delay due to the job sending lag from AM/NM to JobHistoryServer HDFS
   private static final long FETCH_DELAY = 60000;
 
@@ -118,8 +116,8 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   }
 
   public void updateResourceManagerAddresses() {
-    if (Boolean.valueOf(configuration.get(IS_RM_HA_ENABLED))) {
-      String resourceManagers = configuration.get(RESOURCE_MANAGER_IDS);
+    if (Boolean.valueOf(ElephantRunner.getInstance().getHadoopConf().get(IS_RM_HA_ENABLED))) {
+      String resourceManagers = ElephantRunner.getInstance().getHadoopConf().get(RESOURCE_MANAGER_IDS);
       if (resourceManagers != null) {
         logger.info("The list of RM IDs are " + resourceManagers);
         List<String> ids = Arrays.asList(resourceManagers.split(","));
@@ -127,7 +125,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         updateAuthToken();
         for (String id : ids) {
           try {
-            String resourceManager = configuration.get(RESOURCE_MANAGER_ADDRESS + "." + id);
+            String resourceManager = ElephantRunner.getInstance().getHadoopConf().get(RESOURCE_MANAGER_ADDRESS + "." + id);
             String resourceManagerURL = String.format(RM_NODE_STATE_URL, resourceManager);
             logger.info("Checking RM URL: " + resourceManagerURL);
             JsonNode rootNode = readJsonNode(new URL(resourceManagerURL));
@@ -147,7 +145,7 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
         }
       }
     } else {
-      _resourceManagerAddress = configuration.get(RESOURCE_MANAGER_ADDRESS);
+      _resourceManagerAddress = ElephantRunner.getInstance().getHadoopConf().get(RESOURCE_MANAGER_ADDRESS);
     }
     if (_resourceManagerAddress == null) {
       throw new RuntimeException(
@@ -159,7 +157,6 @@ public class AnalyticJobGeneratorHadoop2 implements AnalyticJobGenerator {
   @Override
   public void configure(Configuration configuration)
       throws IOException {
-    this.configuration = configuration;
     String initialFetchWindowString = configuration.get(FETCH_INITIAL_WINDOW_MS);
     if (initialFetchWindowString != null) {
       long initialFetchWindow = Long.parseLong(initialFetchWindowString);

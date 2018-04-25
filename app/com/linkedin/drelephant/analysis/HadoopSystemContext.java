@@ -16,6 +16,7 @@
 
 package com.linkedin.drelephant.analysis;
 
+import com.linkedin.drelephant.ElephantRunner;
 import org.apache.hadoop.conf.Configuration;
 
 
@@ -26,7 +27,6 @@ public final class HadoopSystemContext {
 
   private static final String MAPREDUCE_FRAMEWORK_NAME_PROP = "mapreduce.framework.name";
   private static final String YARN = "yarn";
-  private static final String HADOOP_CONF = "HadoopConf.xml";
 
   private static HadoopSystemContext INSTANCE;
   private static Configuration hadoopConf;
@@ -39,8 +39,7 @@ public final class HadoopSystemContext {
   }
 
   private HadoopSystemContext() {
-    hadoopConf = new Configuration();
-    hadoopConf.addResource(this.getClass().getClassLoader().getResourceAsStream(HADOOP_CONF));
+    hadoopConf = ElephantRunner.getInstance().getHadoopConf();
   }
 
   /**
