@@ -19,7 +19,7 @@ import Dependencies._
 
 name := "dr-elephant"
 
-version := "2.2.7"
+version := "2.2.10"
 
 organization := "com.linkedin.drelephant"
 
