@@ -466,19 +466,23 @@ final class ThreadContextMR2 {
   }
 
   public static JsonNode readJsonNode(URL url, CloseableHttpClient httpClient) throws IOException, AuthenticationException {
+    InputStream inputStream = null;
+    CloseableHttpResponse response = null;
+    try {
+      HttpGet httpGet = new HttpGet(url.toString());
+      response = httpClient.execute(httpGet);
+      HttpEntity entity = response.getEntity();
+      inputStream = entity.getContent();
+      String result = IOUtils.toString(inputStream);
 
-    HttpGet httpGet = new HttpGet(url.toString());
-    CloseableHttpResponse response = httpClient.execute(httpGet);
-    HttpEntity entity = response.getEntity();
-    InputStream inputStream = entity.getContent();
-    String theString = IOUtils.toString(inputStream);
+      return  _LOCAL_MAPPER.get().readTree(result);
+    } finally {
+      if(inputStream != null)
+        inputStream.close();
 
-    JsonNode jsonNode = _LOCAL_MAPPER.get().readTree(theString);
-
-    inputStream.close();
-    response.close();
-
-    return jsonNode;
+      if(response != null)
+        response.close();
+    }
   }
 
   public static void updateAuthToken() {
