@@ -21,6 +21,7 @@ resolvers ++= Seq(
 "Flipkart snapshot repository" at "http://artifactory.fkinternal.com/artifactory/v1.0/artifacts/libs-snapshots-local",
 "Flipkart release repository" at "http://artifactory.fkinternal.com/artifactory/v1.0/artifacts/libs-release-local"
 )
+
 resolvers += "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/"
 
 // Use the Play sbt plugin for Play projects
