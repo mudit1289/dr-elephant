@@ -44,4 +44,5 @@ Some("snapshots" at flipkartArtifactory + "libs-snapshots-local")
 else
 Some("releases" at flipkartArtifactory + "libs-release-local")
 }
+
 publishArtifact in(Compile, packageDoc) in ThisBuild := false
