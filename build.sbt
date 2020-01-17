@@ -17,11 +17,11 @@
 import play.Project._
 import Dependencies._
 
-name := "dr-elephant"
+name := "fk-dr-elephant"
 
 version := "2.2.12"
 
-organization := "com.linkedin.drelephant"
+organization := "com.flipkart.fdp"
 
 javacOptions in Compile ++= Seq("-source", "1.6", "-target", "1.6")
 
@@ -36,3 +36,12 @@ unmanagedClasspath in Compile ++= update.value.select(configurationFilter("compi
 playJavaSettings
 
 scalaVersion := "2.10.4"
+
+publishTo in ThisBuild := {
+val flipkartArtifactory = "http://artifactory.fkinternal.com/artifactory/v1.0/artifacts/"
+if (version.value.trim.endsWith("SNAPSHOT"))
+Some("snapshots" at flipkartArtifactory + "libs-snapshots-local")
+else
+Some("releases" at flipkartArtifactory + "libs-release-local")
+}
+publishArtifact in(Compile, packageDoc) in ThisBuild := false
